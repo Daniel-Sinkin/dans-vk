@@ -1,8 +1,8 @@
 #pragma once
 
-#include "ds_vk/types.hpp"
+#include "dans/vk/types.hpp"
 
-namespace ds_vk
+namespace dans::vk
 {
 
 struct DebugLineConfig
@@ -42,4 +42,4 @@ struct DebugSegment
     Color color{Color::white};
 };
 
-}  // namespace ds_vk
+}  // namespace dans::vk

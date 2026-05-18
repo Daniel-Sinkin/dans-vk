@@ -1,14 +1,14 @@
-#include "ds_vk/geometry.hpp"
+#include "dans/vk/geometry.hpp"
 
-#include "ds_vk/camera.hpp"
-#include "ds_vk/math.hpp"
+#include "dans/vk/camera.hpp"
+#include "dans/vk/math.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <limits>
 
-namespace ds_vk
+namespace dans::vk
 {
 namespace
 {
@@ -251,4 +251,4 @@ auto hit_capsule(const Ray& ray, const Capsule& capsule) noexcept -> std::option
     };
 }
 
-}  // namespace ds_vk
+}  // namespace dans::vk

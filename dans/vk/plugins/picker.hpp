@@ -1,13 +1,13 @@
 #pragma once
 
-#include "ds_vk/geometry.hpp"
-#include "ds_vk/types.hpp"
+#include "dans/vk/geometry.hpp"
+#include "dans/vk/types.hpp"
 
 #include <limits>
 #include <optional>
 #include <vector>
 
-namespace ds_vk
+namespace dans::vk
 {
 using Layer = u32;
 using LayerMask = u32;
@@ -159,4 +159,4 @@ class Picker
     std::vector<Target> targets_{};
     u32 next_target_id_{};
 };
-}  // namespace ds_vk
+}  // namespace dans::vk

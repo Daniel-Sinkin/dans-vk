@@ -1,13 +1,13 @@
 # Vendored Sources
 
 Third-party code is committed directly under `external/` so downstream projects
-can build `ds-vk` from a fixed repository commit without submodules or
+can build `dans-vk` from a fixed repository commit without submodules or
 configure-time downloads. Vulkan itself and shader compiler tooling such as
 `glslc` are intentionally not vendored; install those through the Vulkan SDK.
 
 The initial source snapshot was copied from
 `/Users/danielsinkin/GitHub_private/SPH-Seminar/dfsph_viewer` on 2026-05-15,
-with later additions and cleanup in `ds-vk`.
+with later additions and cleanup in `dans-vk`.
 
 ## Dependencies
 
@@ -44,4 +44,4 @@ with later additions and cleanup in `ds-vk`.
   - Commit: `31c1ad37456438565541f4919958214b6e762fb4`
   - Vendored files: `stb_image.h` v2.30 and `stb_image_write.h` v1.16
   - Vendored form: shortened to the two single-header libraries used by
-    `ds-vk`; the rest of the stb repository is not included.
+    `dans-vk`; the rest of the stb repository is not included.

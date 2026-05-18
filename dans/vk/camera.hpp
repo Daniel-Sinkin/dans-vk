@@ -1,8 +1,8 @@
 #pragma once
 
-#include "ds_vk/types.hpp"
+#include "dans/vk/types.hpp"
 
-namespace ds_vk
+namespace dans::vk
 {
 enum class ProjectionMode : u8
 {
@@ -93,4 +93,4 @@ class Camera
     f32 min_position_z_{};
     ProjectionMode projection_mode_{ProjectionMode::perspective};
 };
-}  // namespace ds_vk
+}  // namespace dans::vk

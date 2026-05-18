@@ -1,15 +1,15 @@
 #pragma once
 
-#include "ds_vk/camera.hpp"
-#include "ds_vk/mesh.hpp"
-#include "ds_vk/types.hpp"
+#include "dans/vk/camera.hpp"
+#include "dans/vk/mesh.hpp"
+#include "dans/vk/types.hpp"
 
 #include <functional>
 #include <optional>
 #include <span>
 #include <vector>
 
-namespace ds_vk
+namespace dans::vk
 {
 enum class ManipulatorMode : u8
 {
@@ -92,4 +92,4 @@ class Manipulator
     std::vector<ActiveTarget> targets_{};
     std::vector<ObjectId> active_ids_{};
 };
-}  // namespace ds_vk
+}  // namespace dans::vk

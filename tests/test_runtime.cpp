@@ -1,4 +1,4 @@
-#include "ds_vk/runtime.hpp"
+#include "dans/vk/runtime.hpp"
 
 #include <concepts>
 #include <iostream>
@@ -12,15 +12,15 @@ auto g_failures = 0;
 
 struct PlainApp
 {
-    auto setup(ds_vk::Runtime& runtime) -> void;
-    auto update(ds_vk::FrameContext& frame, ds_vk::f32 dt_seconds) -> void;
-    auto draw_ui(ds_vk::FrameContext& frame) -> void;
-    auto shutdown(ds_vk::Runtime& runtime) -> void;
+    auto setup(dans::vk::Runtime& runtime) -> void;
+    auto update(dans::vk::FrameContext& frame, dans::vk::f32 dt_seconds) -> void;
+    auto draw_ui(dans::vk::FrameContext& frame) -> void;
+    auto shutdown(dans::vk::Runtime& runtime) -> void;
 };
 
 struct SetupOnlyApp
 {
-    auto setup(ds_vk::Runtime& runtime) -> void;
+    auto setup(dans::vk::Runtime& runtime) -> void;
 };
 
 struct NoHooksApp
@@ -29,18 +29,18 @@ struct NoHooksApp
 };
 
 template <typename App>
-concept has_prototype_runner = requires(ds_vk::Runtime& runtime, App& app) {
+concept has_prototype_runner = requires(dans::vk::Runtime& runtime, App& app) {
     { runtime.run_prototype(app) } -> std::same_as<int>;
 };
 
-static_assert(ds_vk::detail::has_runtime_hook<PlainApp>);
-static_assert(ds_vk::detail::has_runtime_hook<SetupOnlyApp>);
-static_assert(!ds_vk::detail::has_runtime_hook<NoHooksApp>);
+static_assert(dans::vk::detail::has_runtime_hook<PlainApp>);
+static_assert(dans::vk::detail::has_runtime_hook<SetupOnlyApp>);
+static_assert(!dans::vk::detail::has_runtime_hook<NoHooksApp>);
 static_assert(has_prototype_runner<PlainApp>);
 static_assert(has_prototype_runner<SetupOnlyApp>);
 static_assert(!std::is_polymorphic_v<PlainApp>);
-static_assert(sizeof(ds_vk::MeshDebugMode) == sizeof(ds_vk::u8));
-static_assert(sizeof(ds_vk::LightType) == sizeof(ds_vk::u8));
+static_assert(sizeof(dans::vk::MeshDebugMode) == sizeof(dans::vk::u8));
+static_assert(sizeof(dans::vk::LightType) == sizeof(dans::vk::u8));
 
 auto check(bool condition, const std::string_view message) -> void
 {
@@ -53,25 +53,25 @@ auto check(bool condition, const std::string_view message) -> void
 
 auto test_draw_list() -> void
 {
-    ds_vk::DrawList draw{};
-    draw.draw_mesh({.mesh = ds_vk::MeshHandle{}});
+    dans::vk::DrawList draw{};
+    draw.draw_mesh({.mesh = dans::vk::MeshHandle{}});
     check(draw.mesh_commands().empty(), "invalid mesh handles are ignored");
 
     draw.draw_mesh({
-        .mesh = ds_vk::MeshHandle{.id = 0u},
+        .mesh = dans::vk::MeshHandle{.id = 0u},
         .object_id = {.value = 42u},
         .material =
             {
-                .base_color = ds_vk::Color{0.2f, 0.3f, 0.4f, 1.0f},
-                .emissive_color = ds_vk::Color{0.05f, 0.02f, 0.01f, 1.0f},
+                .base_color = dans::vk::Color{0.2f, 0.3f, 0.4f, 1.0f},
+                .emissive_color = dans::vk::Color{0.05f, 0.02f, 0.01f, 1.0f},
                 .metallic = 0.35f,
                 .roughness = 0.47f,
                 .ambient_occlusion = 0.82f,
-                .textures = {.base_color = ds_vk::TextureHandle{.id = 5u}},
+                .textures = {.base_color = dans::vk::TextureHandle{.id = 5u}},
             },
         .debug = {
-            .mode = ds_vk::MeshDebugMode::scalar_heatmap,
-            .color = ds_vk::Color{1.0f, 0.0f, 0.8f, 0.75f},
+            .mode = dans::vk::MeshDebugMode::scalar_heatmap,
+            .color = dans::vk::Color{1.0f, 0.0f, 0.8f, 0.75f},
             .scalar = 4.2f,
             .scalar_range = {0.0f, 10.0f},
             .selected = true,
@@ -104,13 +104,13 @@ auto test_draw_list() -> void
         "mesh draw records material base color texture"
     );
     check(
-        draw.mesh_commands().back().debug.mode == ds_vk::MeshDebugMode::scalar_heatmap,
+        draw.mesh_commands().back().debug.mode == dans::vk::MeshDebugMode::scalar_heatmap,
         "mesh draw records debug mode"
     );
     check(draw.mesh_commands().back().debug.selected, "mesh draw records selected debug flag");
 
     draw.draw_mesh({
-        .mesh = ds_vk::MeshHandle{.id = 8u},
+        .mesh = dans::vk::MeshHandle{.id = 8u},
         .mask = {.visible_to_camera = false, .shadow_producer = true},
     });
     check(draw.mesh_commands().size() == 2u, "shadow-only mesh draw is recorded");
@@ -123,31 +123,31 @@ auto test_draw_list() -> void
     );
 
     draw.draw_mesh({
-        .mesh = ds_vk::MeshHandle{.id = 9u},
+        .mesh = dans::vk::MeshHandle{.id = 9u},
         .mask = {.visible_to_camera = false, .shadow_producer = false},
     });
     check(draw.mesh_commands().size() == 2u, "fully invisible mesh draw is culled");
 
     draw.draw_mesh({
-        .mesh = ds_vk::MeshHandle{.id = 3u},
+        .mesh = dans::vk::MeshHandle{.id = 3u},
         .debug = {.hidden = true},
     });
     check(draw.mesh_commands().size() == 2u, "hidden mesh draws are culled");
 
     draw.draw_mesh({
-        .mesh = ds_vk::MeshHandle{.id = 4u},
-        .object_id = {.value = std::numeric_limits<ds_vk::u32>::max()},
+        .mesh = dans::vk::MeshHandle{.id = 4u},
+        .object_id = {.value = std::numeric_limits<dans::vk::u32>::max()},
     });
     check(
         !draw.mesh_commands().back().object_id.valid(), "max u32 object id is reserved as invalid"
     );
 
     draw.draw_basic_mesh({
-        .mesh = ds_vk::MeshHandle{.id = 1u},
+        .mesh = dans::vk::MeshHandle{.id = 1u},
         .object_id = {.value = 7u},
-        .color = ds_vk::Color{0.8f, 0.7f, 0.6f, 1.0f},
+        .color = dans::vk::Color{0.8f, 0.7f, 0.6f, 1.0f},
         .debug = {
-            .mode = ds_vk::MeshDebugMode::camera_depth,
+            .mode = dans::vk::MeshDebugMode::camera_depth,
             .scalar_range = {1.0f, 12.0f},
         },
     });
@@ -158,7 +158,7 @@ auto test_draw_list() -> void
     );
     check(draw.mesh_commands().back().object_id.value == 7u, "basic mesh draw records object id");
     check(
-        draw.mesh_commands().back().debug.mode == ds_vk::MeshDebugMode::camera_depth,
+        draw.mesh_commands().back().debug.mode == dans::vk::MeshDebugMode::camera_depth,
         "basic mesh draw records camera depth debug mode"
     );
     check(
@@ -166,7 +166,7 @@ auto test_draw_list() -> void
         "basic mesh draw records depth debug range"
     );
 
-    draw.set_ambient_light(ds_vk::Color{0.1f, 0.2f, 0.3f, 1.0f});
+    draw.set_ambient_light(dans::vk::Color{0.1f, 0.2f, 0.3f, 1.0f});
     check(draw.ambient_light().g() == 0.2f, "draw list records ambient light");
     draw.set_environment({
         .texture = {.id = 6u},
@@ -191,41 +191,41 @@ auto test_draw_list() -> void
     });
     draw.spot_light({
         .position = {0.0f, 0.0f, 3.0f},
-        .direction = -ds_vk::k_axis_z,
+        .direction = -dans::vk::k_axis_z,
         .intensity = 20.0f,
         .range = 6.0f,
         .inner_cone_angle = 0.2f,
         .outer_cone_angle = 0.5f,
     });
     check(draw.lights().size() == 3u, "draw list records three light types");
-    check(draw.lights()[0].type == ds_vk::LightType::directional, "directional light type");
+    check(draw.lights()[0].type == dans::vk::LightType::directional, "directional light type");
     check(draw.lights()[0].shadow.enabled, "directional light records shadow config");
-    check(draw.lights()[1].type == ds_vk::LightType::radial, "radial light type");
-    check(draw.lights()[2].type == ds_vk::LightType::spot, "spot light type");
+    check(draw.lights()[1].type == dans::vk::LightType::radial, "radial light type");
+    check(draw.lights()[2].type == dans::vk::LightType::spot, "spot light type");
     draw.radial_light({.enabled = false});
     check(draw.lights().size() == 3u, "disabled lights are ignored");
 
     draw.debug_line({
         .start = {0.0f, 0.0f, 0.0f},
-        .end = ds_vk::k_axis_x,
-        .color = ds_vk::Color::white,
+        .end = dans::vk::k_axis_x,
+        .color = dans::vk::Color::white,
     });
     draw.debug_arrow({
         .origin = {0.0f, 0.0f, 0.0f},
-        .vector = ds_vk::k_axis_y,
-        .color = ds_vk::Color::white,
+        .vector = dans::vk::k_axis_y,
+        .color = dans::vk::Color::white,
     });
     check(draw.debug_segments().size() == 2u, "debug line and arrow are recorded");
     draw.debug_arrow({
         .origin = {0.0f, 0.0f, 0.0f},
-        .vector = 0.001f * ds_vk::k_axis_y,
-        .color = ds_vk::Color::white,
+        .vector = 0.001f * dans::vk::k_axis_y,
+        .color = dans::vk::Color::white,
     });
     check(draw.debug_segments().size() == 2u, "tiny debug arrows are ignored");
     draw.debug_arrow({
         .origin = {0.0f, 0.0f, 0.0f},
-        .vector = ds_vk::k_axis_z,
-        .color = ds_vk::Color::white,
+        .vector = dans::vk::k_axis_z,
+        .color = dans::vk::Color::white,
         .draw_on_top = true,
     });
     check(draw.debug_segments().size() == 2u, "on-top debug arrows skip depth-tested list");
@@ -234,7 +234,7 @@ auto test_draw_list() -> void
     draw.debug_sphere({
         .center = {0.0f, 0.0f, 0.0f},
         .radius = 1.0f,
-        .color = ds_vk::Color::white,
+        .color = dans::vk::Color::white,
         .segments = 12u,
     });
     check(draw.debug_segments().size() == 38u, "debug sphere records three circles");
@@ -242,7 +242,7 @@ auto test_draw_list() -> void
     draw.debug_sphere({
         .center = {0.0f, 0.0f, 0.0f},
         .radius = -1.0f,
-        .color = ds_vk::Color::white,
+        .color = dans::vk::Color::white,
         .segments = 12u,
     });
     check(draw.debug_segments().size() == 38u, "debug sphere ignores non-positive radius");
@@ -265,6 +265,6 @@ auto main() -> int
         std::cerr << g_failures << " test failure(s)\n";
         return 1;
     }
-    std::cout << "all ds_vk runtime tests passed\n";
+    std::cout << "all dans_vk runtime tests passed\n";
     return 0;
 }

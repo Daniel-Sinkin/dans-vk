@@ -1,13 +1,13 @@
 #pragma once
 
-#include "ds_vk/geometry.hpp"
-#include "ds_vk/types.hpp"
+#include "dans/vk/geometry.hpp"
+#include "dans/vk/types.hpp"
 
 #include <array>
 #include <cstddef>
 #include <vector>
 
-namespace ds_vk
+namespace dans::vk
 {
 struct Vertex
 {
@@ -95,4 +95,4 @@ struct UvSphereConfig
 [[nodiscard]] auto has_valid_indices(const PositionNormalMeshData&) noexcept                                         -> bool;
 [[nodiscard]] auto has_valid_indices(const QuantizedPositionNormalMeshData&) noexcept                                -> bool;
 // clang-format on
-}  // namespace ds_vk
+}  // namespace dans::vk

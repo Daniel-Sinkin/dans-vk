@@ -1,16 +1,16 @@
 #pragma once
 
-#include "ds_vk/camera.hpp"
-#include "ds_vk/debug_draw.hpp"
-#include "ds_vk/geometry.hpp"
-#include "ds_vk/types.hpp"
+#include "dans/vk/camera.hpp"
+#include "dans/vk/debug_draw.hpp"
+#include "dans/vk/geometry.hpp"
+#include "dans/vk/types.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <span>
 
-namespace ds_vk::viz
+namespace dans::vk::viz
 {
 enum class ColorPreset : u8
 {
@@ -230,4 +230,4 @@ auto draw_aabb(DrawSink& draw, const AabbMarkerConfig& config) -> usize
     line(p110, p111);
     return 12zu;
 }
-}  // namespace ds_vk::viz
+}  // namespace dans::vk::viz

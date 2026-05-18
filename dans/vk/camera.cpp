@@ -1,12 +1,12 @@
-#include "ds_vk/camera.hpp"
+#include "dans/vk/camera.hpp"
 
-#include "ds_vk/math.hpp"
+#include "dans/vk/math.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <glm/gtc/matrix_transform.hpp>
 
-namespace ds_vk
+namespace dans::vk
 {
 auto Camera::configure(const CameraConfig& config) noexcept -> Camera&
 {
@@ -228,4 +228,4 @@ auto Camera::pan_offset_world(f32 dx_px, f32 dy_px, f32 viewport_height_px) cons
     const auto units = units_per_pixel_y(viewport_height_px);
     return (-dx_px * units) * right() + (dy_px * units) * up();
 }
-}  // namespace ds_vk
+}  // namespace dans::vk

@@ -17,7 +17,7 @@ exec watchexec \
     --stop-signal SIGTERM \
     --stop-timeout 2s \
     --watch app \
-    --watch ds_vk \
+    --watch dans/vk \
     --ignore "build/**" \
     --ignore "build-*/**" \
     --ignore "run/**" \

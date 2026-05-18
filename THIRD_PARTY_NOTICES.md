@@ -1,13 +1,13 @@
 # Third-Party Notices
 
-`ds-vk` vendors third-party code directly under `external/` so the framework
+`dans-vk` vendors third-party code directly under `external/` so the framework
 can be consumed from a single fixed Git commit. Exact upstream URLs, tags, and
 commits are recorded in `external/versions.md`.
 
 The vendored trees are intentionally shortened copies. The removed material is
 limited to non-runtime material such as tests, examples, generated docs, CI
 metadata, IDE project files, and unused helper backends. Core source, public
-headers, build integration needed by `ds-vk`, and license notices are kept.
+headers, build integration needed by `dans-vk`, and license notices are kept.
 
 Vulkan SDK components, Vulkan loader/headers/libraries, and `glslc` are not
 vendored. They are toolchain/system dependencies.

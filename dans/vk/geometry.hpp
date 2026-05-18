@@ -1,10 +1,10 @@
 #pragma once
 
-#include "ds_vk/types.hpp"
+#include "dans/vk/types.hpp"
 
 #include <optional>
 
-namespace ds_vk
+namespace dans::vk
 {
 class Camera;
 
@@ -67,4 +67,4 @@ struct RayHit
 [[nodiscard]] auto hit_capsule(const Ray&, const Capsule&) noexcept        -> std::optional<RayHit>;
 // clang-format on
 
-}  // namespace ds_vk
+}  // namespace dans::vk

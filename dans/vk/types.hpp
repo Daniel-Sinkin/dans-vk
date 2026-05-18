@@ -14,7 +14,7 @@
 #    endif
 #endif
 
-namespace ds_vk
+namespace dans::vk
 {
 using usize = std::size_t;
 using isize = std::ptrdiff_t;
@@ -213,4 +213,4 @@ inline constexpr Vec3 k_axis_x{1.0f, 0.0f, 0.0f};
 inline constexpr Vec3 k_axis_y{0.0f, 1.0f, 0.0f};
 inline constexpr Vec3 k_axis_z{0.0f, 0.0f, 1.0f};
 inline constexpr Quat k_quat_identity{1.0f, 0.0f, 0.0f, 0.0f};
-}  // namespace ds_vk
+}  // namespace dans::vk

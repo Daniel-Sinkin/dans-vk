@@ -1,9 +1,9 @@
 #pragma once
 
-#include "ds_vk/camera.hpp"
-#include "ds_vk/debug_draw.hpp"
-#include "ds_vk/mesh.hpp"
-#include "ds_vk/types.hpp"
+#include "dans/vk/camera.hpp"
+#include "dans/vk/debug_draw.hpp"
+#include "dans/vk/mesh.hpp"
+#include "dans/vk/types.hpp"
 
 #include <concepts>
 #include <filesystem>
@@ -14,7 +14,7 @@
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
 
-namespace ds_vk
+namespace dans::vk
 {
 
 struct DescriptorIndexingSupport
@@ -229,7 +229,7 @@ struct RuntimeStats
 
 struct RuntimeConfig
 {
-    std::string window_title{"ds_vk app"};
+    std::string window_title{"dans_vk app"};
     u32 initial_width{1280};
     u32 initial_height{800};
     std::filesystem::path shader_dir{};
@@ -408,7 +408,7 @@ class Runtime
     {
         static_assert(
             detail::has_runtime_hook<App>,
-            "ds_vk prototype apps must provide at least one of setup(Runtime&), "
+            "dans_vk prototype apps must provide at least one of setup(Runtime&), "
             "update(FrameContext&, f32), draw_ui(FrameContext&), or shutdown(Runtime&)."
         );
 
@@ -453,4 +453,4 @@ class Runtime
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };
-}  // namespace ds_vk
+}  // namespace dans::vk

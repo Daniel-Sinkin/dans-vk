@@ -16,7 +16,7 @@ except ModuleNotFoundError:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate that a ds_vk screenshot is nonblank.")
+    parser = argparse.ArgumentParser(description="Validate that a dans_vk screenshot is nonblank.")
     parser.add_argument("image")
     parser.add_argument("--min-stddev", type=float, default=3.0)
     parser.add_argument("--min-brightness", type=float, default=8.0)

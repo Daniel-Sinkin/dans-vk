@@ -1,8 +1,8 @@
 #pragma once
 
-#include "ds_vk/types.hpp"
+#include "dans/vk/types.hpp"
 
-namespace ds_vk
+namespace dans::vk
 {
 
 [[nodiscard]] inline auto normalize_or(Vec3 value, Vec3 fallback) noexcept -> Vec3
@@ -15,4 +15,4 @@ namespace ds_vk
     return value * glm::inversesqrt(length_squared);
 }
 
-}  // namespace ds_vk
+}  // namespace dans::vk

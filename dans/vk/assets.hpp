@@ -1,14 +1,14 @@
 #pragma once
 
-#include "ds_vk/mesh.hpp"
-#include "ds_vk/types.hpp"
+#include "dans/vk/mesh.hpp"
+#include "dans/vk/types.hpp"
 
 #include <filesystem>
 #include <span>
 #include <string>
 #include <vector>
 
-namespace ds_vk
+namespace dans::vk
 {
 struct GltfMeshLoadConfig
 {
@@ -46,7 +46,7 @@ struct GltfMeshData
 
 struct GltfWriteConfig
 {
-    std::string generator{"ds_vk"};
+    std::string generator{"dans_vk"};
     bool pretty{true};
 };
 
@@ -59,4 +59,4 @@ auto write_gltf_scene(
     std::span<const GltfImageData> = {},
     const GltfWriteConfig& = {}
 ) -> void;
-}  // namespace ds_vk
+}  // namespace dans::vk

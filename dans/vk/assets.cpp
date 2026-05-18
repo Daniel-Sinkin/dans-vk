@@ -1,6 +1,6 @@
-#include "ds_vk/assets.hpp"
+#include "dans/vk/assets.hpp"
 
-#include "ds_vk/math.hpp"
+#include "dans/vk/math.hpp"
 
 #include <algorithm>
 #include <array>
@@ -15,7 +15,7 @@
 #include <string_view>
 #include <vector>
 
-namespace ds_vk
+namespace dans::vk
 {
 namespace
 {
@@ -508,4 +508,4 @@ auto load_gltf_mesh(const std::filesystem::path& path, const GltfMeshLoadConfig&
     }
     return mesh_data;
 }
-}  // namespace ds_vk
+}  // namespace dans::vk

@@ -1,9 +1,9 @@
-#include "ds_vk/plugins/viz.hpp"
+#include "dans/vk/plugins/viz.hpp"
 
 #include <array>
 #include <cmath>
 
-namespace ds_vk::viz
+namespace dans::vk::viz
 {
 namespace
 {
@@ -196,4 +196,4 @@ auto range_from_values(std::span<const f32> values) noexcept -> ScalarRange
     }
     return ScalarRange{.min = min_value, .max = max_value};
 }
-}  // namespace ds_vk::viz
+}  // namespace dans::vk::viz

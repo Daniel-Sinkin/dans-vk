@@ -1,6 +1,6 @@
 # Architecture
 
-`ds_vk` is a small personal Vulkan framework for visualization experiments. It
+`dans_vk` is a small personal Vulkan framework for visualization experiments. It
 is not a renderer abstraction layer, game engine, or cross-API project.
 
 ## Goals
@@ -30,7 +30,7 @@ passes, and presentation. The app owns the order in which it asks those pieces t
 record work:
 
 ```cpp
-ds_vk::Runtime runtime{cfg};
+dans::vk::Runtime runtime{cfg};
 runtime.initialize();
 
 while (auto* frame = runtime.begin_frame())
@@ -80,7 +80,7 @@ loop directly.
 
 ## Current Shader Interface
 
-- Public color data uses `ds_vk::Color` and `ds_vk::ColorU8`, not `Vec4`.
+- Public color data uses `dans::vk::Color` and `dans::vk::ColorU8`, not `Vec4`.
   Colors are array-backed standalone types with named conversion helpers such as
   `to_vec4`, `to_color_u8`, `with_alpha`, and `mix_color`; generic vector
   arithmetic is intentionally unavailable for colors.
@@ -122,12 +122,12 @@ loop directly.
   shadow map and are intentionally left for a separate pass.
 - Debug segments use a separate 96-byte push block and one per-frame mapped
   segment buffer.
-- `ds_vk::viz` builds visual helpers on top of that debug segment path: color
+- `dans::vk::viz` builds visual helpers on top of that debug segment path: color
   ramps, scalar ranges, vector fields, and camera-facing cross markers.
 
 ## Repo Layout
 
-- `ds_vk/` is the framework/library: public headers, implementation files, and
+- `dans/vk/` is the framework/library: public headers, implementation files, and
   built-in shaders live together there.
 - `app/` contains full app users of the framework.
 - `app/pba/` is an app-owned headless physics library used by the PBA user. It
@@ -138,25 +138,25 @@ loop directly.
 
 ## Current App Users
 
-- `ds_vk_basic_app` is the small interactive material/light/picker playground.
-- `ds_vk_vectorfield_app` is the vector-field visualization user that matures
-  `ds_vk::viz` without making vector fields part of the runtime core.
-- `ds_vk_dfsph_app` is a fixed-data DFSPH playback user. It loads the vendored
+- `dans_vk_basic_app` is the small interactive material/light/picker playground.
+- `dans_vk_vectorfield_app` is the vector-field visualization user that matures
+  `dans::vk::viz` without making vector fields part of the runtime core.
+- `dans_vk_dfsph_app` is a fixed-data DFSPH playback user. It loads the vendored
   small-dambreak VTK history from `assets/dfsph/.../vtk`, renders particles as
   mesh draws, can preload decoded CPU surface meshes for the mesh view, and uses
-  `ds_vk::viz` for velocity arrows and bounds markers. It does not vendor
+  `dans::vk::viz` for velocity arrows and bounds markers. It does not vendor
   SPlisHSPlasH or generate scenes on demand.
-- `ds_vk_pba_app` is a realtime rigid-body visualization user. Space toggles
+- `dans_vk_pba_app` is a realtime rigid-body visualization user. Space toggles
   simulation pause while camera controls continue to work. Its pyramid physics
   is an app-side MVP AABB solver with force accumulators, a small force set,
   grabbed-body handling, and sweep-and-prune broadphase stats. Speed coloring
-  and velocity arrows are routed through `ds_vk::viz`; selection uses
-  `ds_vk::picker`, and object manipulation uses the callback-based
-  `ds_vk::Manipulator` plugin.
+  and velocity arrows are routed through `dans::vk::viz`; selection uses
+  `dans::vk::picker`, and object manipulation uses the callback-based
+  `dans::vk::Manipulator` plugin.
 
 ## Asset Loading
 
-`ds_vk::assets` currently contains a small CPU-side glTF/GLB mesh loader for the
+`dans::vk::assets` currently contains a small CPU-side glTF/GLB mesh loader for the
 framework's own visualization needs. It supports triangle primitives with
 positions, normals, texcoords, indices, embedded data URIs, external buffers, and
 GLB BIN chunks. It can generate smooth normals when a test mesh omits them.
@@ -176,10 +176,10 @@ interface base class. A full app usually still has functions like this, but
 class MyApp final
 {
   public:
-    auto setup(ds_vk::Runtime& runtime) -> void;
-    auto update(ds_vk::FrameContext& frame, ds_vk::f32 dt_seconds) -> void;
-    auto draw_ui(ds_vk::FrameContext& frame) -> void;
-    auto shutdown(ds_vk::Runtime& runtime) -> void;
+    auto setup(dans::vk::Runtime& runtime) -> void;
+    auto update(dans::vk::FrameContext& frame, dans::vk::f32 dt_seconds) -> void;
+    auto draw_ui(dans::vk::FrameContext& frame) -> void;
+    auto shutdown(dans::vk::Runtime& runtime) -> void;
 };
 ```
 
@@ -187,7 +187,7 @@ The app can stay high-level for simple work:
 
 ```cpp
 runtime.camera({
-    .pivot = 0.7f * ds_vk::k_axis_z,
+    .pivot = 0.7f * dans::vk::k_axis_z,
     .distance = 5.4f,
     .yaw = glm::radians(42.0f),
     .pitch = glm::radians(25.0f),
@@ -202,7 +202,7 @@ frame.draw.draw_mesh({
     .transform = transform,
     .object_id = {.value = 17u},
     .material = {.base_color = color, .metallic = 0.2f, .roughness = 0.5f},
-    .debug = {.mode = ds_vk::MeshDebugMode::selected_pulse, .selected = is_selected},
+    .debug = {.mode = dans::vk::MeshDebugMode::selected_pulse, .selected = is_selected},
 });
 frame.draw.debug_arrow({
     .origin = origin,
@@ -231,11 +231,11 @@ after `runtime.initialize()`, usually from `setup`, `update`, or UI callbacks.
 Selection is deliberately not an `on_click` callback on a mesh resource. A mesh
 can be rendered many times with different transforms, materials, masks, and app
 meaning, so selection is modeled as app-owned object IDs plus an optional static
-picker module. `ds_vk::Picker` owns only per-frame picking targets, not scene
+picker module. `dans::vk::Picker` owns only per-frame picking targets, not scene
 objects:
 
 ```cpp
-ds_vk::Picker picker;
+dans::vk::Picker picker;
 
 picker.add_sphere({
     .object_id = sphere_id,
@@ -253,8 +253,8 @@ const auto hit = picker.click({
     .camera = frame.camera,
     .mouse_px = frame.input.left_click.position_px,
     .viewport_px = {
-        static_cast<ds_vk::f32>(frame.extent.width),
-        static_cast<ds_vk::f32>(frame.extent.height),
+        static_cast<dans::vk::f32>(frame.extent.width),
+        static_cast<dans::vk::f32>(frame.extent.height),
     },
 });
 ```
@@ -279,8 +279,8 @@ selected endpoints into reusable helpers:
 
 ```cpp
 viz::draw_vector_field(frame.draw, {
-    .positions = std::span<const ds_vk::Vec3>{positions},
-    .vectors = std::span<const ds_vk::Vec3>{velocities},
+    .positions = std::span<const dans::vk::Vec3>{positions},
+    .vectors = std::span<const dans::vk::Vec3>{velocities},
     .scale = 0.04f,
     .color_by_magnitude = true,
     .color_ramp = speed_ramp,

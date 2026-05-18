@@ -1,4 +1,4 @@
-#include "ds_vk/mesh.hpp"
+#include "dans/vk/mesh.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -7,7 +7,7 @@
 #include <limits>
 #include <numbers>
 
-namespace ds_vk
+namespace dans::vk
 {
 namespace
 {
@@ -276,4 +276,4 @@ auto has_valid_indices(const QuantizedPositionNormalMeshData& mesh) noexcept -> 
         [&](u32 index) -> bool { return static_cast<usize>(index) < mesh.vertices.size(); }
     );
 }
-}  // namespace ds_vk
+}  // namespace dans::vk

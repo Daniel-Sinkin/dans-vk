@@ -171,7 +171,7 @@ Sources checked for this pass:
   - The guide has a specific "depth attachment then fragment-shader sampled"
     example for shadow maps. The important shape is depth-stencil attachment
     write in early/late fragment tests to fragment shader read.
-  - `ds_vk` currently uses legacy `vkCmdPipelineBarrier` because the rest of the
+  - `dans_vk` currently uses legacy `vkCmdPipelineBarrier` because the rest of the
     runtime already uses Vulkan 1.2-era render passes. A later cleanup can move
     this to `vkCmdPipelineBarrier2`.
 
@@ -187,7 +187,7 @@ Sources checked for this pass:
   https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_lights_punctual/README.md
   - Useful light semantics even though this repo is not a glTF renderer.
   - Adopted the same three conceptual light families: directional, point
-    (called radial in `ds_vk`), and spot.
+    (called radial in `dans_vk`), and spot.
   - Adopted inverse-square point/spot attenuation with a smooth range cutoff.
   - Adopted the common CPU-precomputed spot cone scale/offset form so the shader
     only does a dot product, clamp, and square.
@@ -234,12 +234,12 @@ Migration decisions:
 
 - Treat DFSPH and PBA as full `app/` users, not examples and not framework
   modules. Their job is to pull on the framework from real use cases.
-- Keep scene theory out of `ds_vk`. Scene graphs, object ownership, playback
+- Keep scene theory out of `dans_vk`. Scene graphs, object ownership, playback
   timelines, and domain state remain app concerns until repeated projects prove
   a smaller reusable shape.
 - Add only narrow reusable framework pieces:
-  - `ds_vk::assets` for minimal glTF/GLB CPU mesh loading.
-  - `ds_vk::viz::draw_aabb` so DFSPH/PBA bounds visualization does not duplicate
+  - `dans::vk::assets` for minimal glTF/GLB CPU mesh loading.
+  - `dans::vk::viz::draw_aabb` so DFSPH/PBA bounds visualization does not duplicate
     line-corner code.
   - `InputState::space_pressed` so interactive apps can pause simulations
     without freezing camera/runtime input.
@@ -301,7 +301,7 @@ Useful follow-up pressure points:
 - PBA collision is app-owned for now. The manipulator plugin owns only
   transient interaction state, with app callbacks for transform get/set.
 - Capture/video export from the old projects is still a good candidate for a
-  `ds_vk::capture` module once screenshot validation stabilizes.
+  `dans::vk::capture` module once screenshot validation stabilizes.
 - Reduce the fixed material texture table from 16 to 15 slots because the shadow
   map sampler shares the same fragment shader stage and MoltenVK commonly
   exposes a 16-sampler per-stage floor on Apple hardware.
@@ -317,17 +317,17 @@ Important discrepancies from the proper PBA implementation:
   angular velocity, inertia tensors, sleeping, grabbed-body flags, sweep-and-
   prune broadphase, OBB contact generation, warm starting, position/velocity
   constraint solvers, and a contact cache.
-- The `ds_vk` PBA user remains deliberately smaller: app-owned `Body` data,
+- The `dans_vk` PBA user remains deliberately smaller: app-owned `Body` data,
   linear velocity only, no torque/angular solver, no sleeping, no contact cache,
   and an AABB-style penetration resolver.
 - This pass integrated the reusable parts that fit the MVP without turning
-  `ds_vk` into a physics engine:
+  `dans_vk` into a physics engine:
   - `Body::force_accum`;
   - `GravityForce`, `AttractorForce`, `RepulsionForce`, and `NBodyForce`;
   - grabbed-body skipping for force integration and collision resolution;
   - a sweep-and-prune broadphase over world AABBs;
   - per-step broadphase stats for checking candidate count against all-pairs;
-  - `ds_vk::Manipulator`, a static plugin with callback-owned transforms.
+  - `dans::vk::Manipulator`, a static plugin with callback-owned transforms.
 - Performance judgment: for the current 56-body pyramid this app should be
   roughly comparable or faster per step than the proper PBA because the solver
   is much simpler. It is not equivalent for larger scenes. The proper PBA's SOA
@@ -429,18 +429,18 @@ Not copied yet:
 
 The repo starts as a "Vulkan runtime plus helpers", not an engine:
 
-- The library is grouped under `ds_vk/`: headers, `.cpp` files, and built-in
+- The library is grouped under `dans/vk/`: headers, `.cpp` files, and built-in
   shaders live together because this repo is the library, not an installed
   package split into `include/` and `src/`.
-- `ds_vk::Runtime` owns SDL, Vulkan instance/device/swapchain, command buffers,
+- `dans::vk::Runtime` owns SDL, Vulkan instance/device/swapchain, command buffers,
   frame sync, VMA, ImGui, depth attachment, screenshots, and built-in pipelines.
 - `Runtime::run(app)` accepts a normal app object with matching hook methods:
   `setup`, `update`, `draw_ui`, and `shutdown`. This avoids an inheritance
   requirement while preserving a small callback surface for the runtime loop.
-- `ds_vk::FrameContext` exposes raw `VkInstance`, `VkPhysicalDevice`,
+- `dans::vk::FrameContext` exposes raw `VkInstance`, `VkPhysicalDevice`,
   `VkDevice`, `VkQueue`, `VkCommandBuffer`, `VmaAllocator`, the current
   `Camera`, and a `DrawList`.
-- `ds_vk::DrawList` is immediate-mode from app code: `draw_mesh`,
+- `dans::vk::DrawList` is immediate-mode from app code: `draw_mesh`,
   `draw_basic_mesh`, `debug_line`, `debug_arrow`, `debug_sphere`. Internally
   the renderer batches debug segments and records mesh draw commands for the
   frame.
@@ -482,14 +482,14 @@ future synchronization helpers should be thin wrappers over `vkCmdPipelineBarrie
 
 - `cmake -S . -B build` configured successfully with the Homebrew LLVM toolchain
   and vendored SDL3/GLM/ImGui/VMA.
-- Initial build failed because `ds_vk/mesh.cpp` included `glm/gtx/quaternion.hpp`.
+- Initial build failed because `dans/vk/mesh.cpp` included `glm/gtx/quaternion.hpp`.
   GLM's GTX headers are experimental unless `GLM_ENABLE_EXPERIMENTAL` is set.
   The implementation did not need GTX functionality; switching to stable
   `glm/gtc/quaternion.hpp` and `glm::mat4_cast` fixed the model.
 - `cmake --build build` then completed successfully.
 - `ctest --test-dir build --output-on-failure` passed the CPU-side mesh and
   camera tests.
-- `./build/ds_vk_basic_app --smoke-frames 20 --screenshot run/basic.png --hide-ui`
+- `./build/dans_vk_basic_app --smoke-frames 20 --screenshot run/basic.png --hide-ui`
   ran the Vulkan app and wrote a PNG screenshot.
 - `scripts/validate_screenshot.py` initially failed because Pillow was missing.
   A local `.venv` was created and `pillow` was installed for screenshot pixel
@@ -503,7 +503,7 @@ future synchronization helpers should be thin wrappers over `vkCmdPipelineBarrie
 
 ### 2026-05-15 Warning Baseline
 
-- `clang-tidy ds_vk/camera.cpp ds_vk/mesh.cpp ds_vk/runtime.cpp ds_vk/vma_support.cpp
+- `clang-tidy dans/vk/camera.cpp dans/vk/mesh.cpp dans/vk/runtime.cpp dans/vk/vma_support.cpp
   app/main.cpp tests/test_main.cpp -p build` initially found a mix of useful
   issues and noisy graphics-API/style friction.
 - Real fixes kept:
@@ -525,7 +525,7 @@ future synchronization helpers should be thin wrappers over `vkCmdPipelineBarrie
   warnings suppressed by the header filter.
 - `cmake --build build` and `ctest --test-dir build --output-on-failure` still
   pass after the warning cleanup.
-- `./build/ds_vk_basic_app --smoke-frames 20 --screenshot
+- `./build/dans_vk_basic_app --smoke-frames 20 --screenshot
   run/basic_descriptor_gate.png --hide-ui` wrote a screenshot after the
   descriptor-indexing feature-gate change.
 - `./.venv/bin/python scripts/validate_screenshot.py
@@ -540,16 +540,16 @@ future synchronization helpers should be thin wrappers over `vkCmdPipelineBarrie
 - Added `tests/test_runtime.cpp` so draw-list behavior is tested without
   initializing Vulkan.
 - A parallel build/test command produced a false `ctest` failure because CTest
-  tried to run `ds_vk_runtime_tests` before the new executable had finished
+  tried to run `dans_vk_runtime_tests` before the new executable had finished
   building. The correction is sequencing, not implementation: build first, then
   run tests.
 - The first build of the new runtime test failed because `{1.0f}` cannot be
   passed as a `Vec4` argument through copy-initialization; GLM's scalar vector
-  constructor is explicit. The test now uses `ds_vk::Vec4{1.0f}`, matching app
+  constructor is explicit. The test now uses `dans::vk::Vec4{1.0f}`, matching app
   code style.
 - After the fix, `cmake --build build` and `ctest --test-dir build
-  --output-on-failure` pass with both `ds_vk_tests` and `ds_vk_runtime_tests`.
-- `./build/ds_vk_basic_app --smoke-frames 20 --screenshot
+  --output-on-failure` pass with both `dans_vk_tests` and `dans_vk_runtime_tests`.
+- `./build/dans_vk_basic_app --smoke-frames 20 --screenshot
   run/basic_debug_sphere.png --hide-ui` wrote a PNG with the wire sphere
   visible over the shaded sphere.
 - `./.venv/bin/python scripts/validate_screenshot.py
@@ -570,7 +570,7 @@ future synchronization helpers should be thin wrappers over `vkCmdPipelineBarrie
   inverse-transpose of the model matrix instead of `mat3(model)`.
 - `cmake --build build`, `ctest --test-dir build --output-on-failure`, and
   clang-tidy still pass after the push-constant change.
-- `./build/ds_vk_basic_app --smoke-frames 20 --screenshot run/basic_push128.png
+- `./build/dans_vk_basic_app --smoke-frames 20 --screenshot run/basic_push128.png
   --hide-ui` wrote a PNG after recompiling the shaders.
 - `./.venv/bin/python scripts/validate_screenshot.py run/basic_push128.png`
   passed with `2560x1600`, mean RGB around `37`, and standard deviation around
@@ -589,8 +589,8 @@ future synchronization helpers should be thin wrappers over `vkCmdPipelineBarrie
 
 ### 2026-05-15 Core-Only Build Check
 
-- Configured `build-core` with `-DDS_VK_BUILD_APP=OFF
-  -DDS_VK_USE_SYSTEM_VULKAN=OFF` to verify the CPU-side core and mesh/camera
+- Configured `build-core` with `-DDANS_VK_BUILD_EXAMPLES=OFF
+  -DDANS_VK_USE_SYSTEM_VULKAN=OFF` to verify the CPU-side core and mesh/camera
   tests can still build without the Vulkan app target.
 - I initially repeated the build/test race by launching CTest beside the first
   build of that tree. After the build completed, `ctest --test-dir build-core
@@ -629,7 +629,7 @@ future synchronization helpers should be thin wrappers over `vkCmdPipelineBarrie
 - The basic app now uses `replace_mesh` for generated sphere rebuilds.
 - `cmake --build build`, `ctest --test-dir build --output-on-failure`, and a
   targeted tidy pass over runtime/app pass after the change.
-- `./build/ds_vk_basic_app --smoke-frames 20 --screenshot
+- `./build/dans_vk_basic_app --smoke-frames 20 --screenshot
   run/basic_replace_mesh.png --hide-ui` wrote a screenshot, and
   `./.venv/bin/python scripts/validate_screenshot.py run/basic_replace_mesh.png`
   passed with `2560x1600`, mean RGB around `37`, and standard deviation around
@@ -642,8 +642,8 @@ future synchronization helpers should be thin wrappers over `vkCmdPipelineBarrie
 - The mapped readback buffer is wrapped in a `try`/`catch` so invalidation or
   conversion failures unmap before rethrowing.
 - `cmake --build build`, `ctest --test-dir build --output-on-failure`, and
-  clang-tidy over `ds_vk/runtime.cpp` pass after the change.
-- `./build/ds_vk_basic_app --smoke-frames 20 --screenshot
+  clang-tidy over `dans/vk/runtime.cpp` pass after the change.
+- `./build/dans_vk_basic_app --smoke-frames 20 --screenshot
   run/basic_capture_guard.png --hide-ui` wrote a screenshot, and
   `./.venv/bin/python scripts/validate_screenshot.py
   run/basic_capture_guard.png` passed with `2560x1600`, mean RGB around `37`,
@@ -656,7 +656,7 @@ future synchronization helpers should be thin wrappers over `vkCmdPipelineBarrie
 - The timer now starts before the render pass begins so the stat covers mesh,
   debug, and ImGui command recording as well.
 - `cmake --build build`, `ctest --test-dir build --output-on-failure`, and
-  clang-tidy over `ds_vk/runtime.cpp` pass after the change.
+  clang-tidy over `dans/vk/runtime.cpp` pass after the change.
 
 ### 2026-05-15 Phong-Style Shading Check
 
@@ -678,7 +678,7 @@ future synchronization helpers should be thin wrappers over `vkCmdPipelineBarrie
   the nice-to-have Linux/Windows path less brittle on devices exposing a lower
   Vulkan version.
 - `cmake --build build`, `ctest --test-dir build --output-on-failure`, and
-  clang-tidy over `ds_vk/runtime.cpp` pass after the change.
+  clang-tidy over `dans/vk/runtime.cpp` pass after the change.
 
 ### 2026-05-15 Final Verification Before Handoff
 
@@ -688,9 +688,9 @@ future synchronization helpers should be thin wrappers over `vkCmdPipelineBarrie
   - `cmake --build build`
   - `ctest --test-dir build --output-on-failure`
   - `ctest --test-dir build-core --output-on-failure`
-  - `clang-tidy ds_vk/camera.cpp ds_vk/mesh.cpp ds_vk/runtime.cpp ds_vk/vma_support.cpp
+  - `clang-tidy dans/vk/camera.cpp dans/vk/mesh.cpp dans/vk/runtime.cpp dans/vk/vma_support.cpp
     app/main.cpp tests/test_main.cpp tests/test_runtime.cpp -p build`
-  - `./build/ds_vk_basic_app --smoke-frames 20 --screenshot
+  - `./build/dans_vk_basic_app --smoke-frames 20 --screenshot
     run/basic_final.png --hide-ui`
   - `./.venv/bin/python scripts/validate_screenshot.py run/basic_final.png`
 - Final screenshot validation passed with `2560x1600`, mean RGB around `39`,
@@ -698,22 +698,22 @@ future synchronization helpers should be thin wrappers over `vkCmdPipelineBarrie
 
 ### 2026-05-15 Library Layout Correction
 
-- Daniel pointed out that `include/ds_vk` plus `src` is a weird split for this
+- Daniel pointed out that `include/dans_vk` plus `src` is a weird split for this
   repository because this repo is the library itself.
 - Moved framework headers, implementation files, and built-in shaders into one
-  `ds_vk/` tree.
+  `dans/vk/` tree.
 - `app/`, `tests/`, `external/`, `docs/`, and `scripts/` remain top-level
   project support/user areas.
 - Updated CMake and `.clang-tidy` for the new paths.
 - Verified after the move with `cmake -S . -B build`, `cmake -S . -B
-  build-core -DDS_VK_BUILD_APP=OFF -DDS_VK_USE_SYSTEM_VULKAN=OFF`, both build
-  trees, both CTest suites, clang-tidy on the new `ds_vk/...` paths, and
+  build-core -DDANS_VK_BUILD_EXAMPLES=OFF -DDANS_VK_USE_SYSTEM_VULKAN=OFF`, both build
+  trees, both CTest suites, clang-tidy on the new `dans/vk/...` paths, and
   `run/basic_layout.png` screenshot validation.
 
 ### 2026-05-15 Plain App Hooks
 
 - Daniel preferred not having an inheritance-based app interface.
-- Removed `ds_vk::Application` and the virtual `setup/update/draw_ui/shutdown`
+- Removed `dans::vk::Application` and the virtual `setup/update/draw_ui/shutdown`
   surface.
 - `Runtime::run(app)` now builds a small callback table from a normal app object
   with matching hook methods. `setup`, `draw_ui`, and `shutdown` are optional,
@@ -761,7 +761,7 @@ future synchronization helpers should be thin wrappers over `vkCmdPipelineBarrie
   `+count_per_side`.
 - Added a CPU test for `CameraConfig` application and default retention.
 - Verified with both build trees, both CTest suites, clangd checks for
-  `app/main.cpp` and `ds_vk/camera.cpp`, clang-tidy over touched files, and
+  `app/main.cpp` and `dans/vk/camera.cpp`, clang-tidy over touched files, and
   `run/camera_config_grid.png` screenshot validation.
 
 ### 2026-05-15 Config-Based Draw Calls And Materials
@@ -808,13 +808,13 @@ future synchronization helpers should be thin wrappers over `vkCmdPipelineBarrie
 ### 2026-05-15 Picker Plugin And Click Selection
 
 - Promoted the ad hoc selection helpers into a static optional picker module:
-  `ds_vk_picker` builds from `ds_vk/plugins/picker.cpp` and links into apps or
+  `dans_vk_picker` builds from `dans/vk/plugins/picker.cpp` and links into apps or
   tests that want object selection.
 - The runtime exposes per-frame mouse state through `FrameContext::input`.
   A left click is recorded only when ImGui does not want the mouse, and SDL
   window coordinates are converted to framebuffer pixels so Retina swapchains
   and `make_pick_ray` agree.
-- `ds_vk::Picker` has two public query paths:
+- `dans::vk::Picker` has two public query paths:
   - `click({.camera, .mouse_px, .viewport_px, .layer_mask})`, for normal app UI
     mouse picking;
   - `raycast({.ray, .layer_mask})`, for code that already has a world-space ray.
@@ -832,11 +832,11 @@ future synchronization helpers should be thin wrappers over `vkCmdPipelineBarrie
 
 ### 2026-05-16 Viz Plugin And Vector Field Demo
 
-- Added a second static plugin target, `ds_vk_viz`, under `ds_vk/plugins`.
+- Added a second static plugin target, `dans_vk_viz`, under `dans/vk/plugins`.
   This is intentionally a reusable visualization vocabulary, not an SPH viewer
-  or app framework. It depends only on `ds_vk_core` and can be used in the
+  or app framework. It depends only on `dans_vk_core` and can be used in the
   core-only build.
-- `ds_vk::viz` currently provides:
+- `dans::vk::viz` currently provides:
   - `ColorRamp` with grayscale, blue-red, viridis, magma, and turbo-style
     presets;
   - `range_from_values` for finite scalar ranges;
@@ -903,7 +903,7 @@ future synchronization helpers should be thin wrappers over `vkCmdPipelineBarrie
 - Mirrored the older `physically-based-animations` direction: colors are now
   standalone array-backed types with accessors, while math-like color operations
   are named helpers.
-- Added `ds_vk::Color` for float RGBA and `ds_vk::ColorU8` for packed 8-bit
+- Added `dans::vk::Color` for float RGBA and `dans::vk::ColorU8` for packed 8-bit
   RGBA, plus `to_vec4`, `to_color`, `to_color_u8`, `with_alpha`, and
   `mix_color`.
 - Public mesh/material/debug/viz/runtime config APIs now use `Color`. Internal
@@ -974,7 +974,7 @@ future synchronization helpers should be thin wrappers over `vkCmdPipelineBarrie
   - `cmake --build build`
   - `ctest --test-dir build-core --output-on-failure`
   - `ctest --test-dir build --output-on-failure`
-  - `clang-tidy -p build ds_vk/runtime.cpp app/main.cpp tests/test_runtime.cpp tests/test_main.cpp`
+  - `clang-tidy -p build dans/vk/runtime.cpp app/main.cpp tests/test_runtime.cpp tests/test_main.cpp`
   - `./run.sh --smoke-frames 8 --screenshot run/lights_shadows.png --hide-ui`
   - `./.venv/bin/python scripts/validate_screenshot.py run/lights_shadows.png --min-stddev 4 --min-brightness 5`
 
@@ -1002,8 +1002,8 @@ future synchronization helpers should be thin wrappers over `vkCmdPipelineBarrie
 - Verification:
   - `cmake --build build`
   - `ctest --test-dir build --output-on-failure`
-  - `clang-format --dry-run --Werror ds_vk/runtime.cpp ds_vk/runtime.hpp ds_vk/shaders/mesh.vert`
-  - `clang-tidy -p build ds_vk/runtime.cpp app/dfsph_main.cpp`
+  - `clang-format --dry-run --Werror dans/vk/runtime.cpp dans/vk/runtime.hpp dans/vk/shaders/mesh.vert`
+  - `clang-tidy -p build dans/vk/runtime.cpp app/dfsph_main.cpp`
   - `git diff --check`
   - `./run.sh --app dfsph --scene-id dambreak_small_iisph_v1 --show-mesh --show-particles --hide-ui --smoke-frames 8 --screenshot run/dfsph_perf_batch_smoke.png`
   - `./.venv/bin/python scripts/validate_screenshot.py run/dfsph_perf_batch_smoke.png`
@@ -1016,7 +1016,7 @@ future synchronization helpers should be thin wrappers over `vkCmdPipelineBarrie
   decompressed quantized payloads, and about 9.38 GiB as fully expanded
   `MeshData` CPU vectors before allocator overhead. That is large, but
   acceptable as an opt-in DFSPH mesh-viewer path on the development machine.
-- `ds_vk_dfsph_app` now preloads decoded CPU `MeshData` for every available
+- `dans_vk_dfsph_app` now preloads decoded CPU `MeshData` for every available
   surface frame when the surface mesh view is enabled. This deliberately keeps
   the renderer resource model unchanged: playback still uploads the active
   frame through `Runtime::replace_mesh`, but file IO, gzip, and decode are paid
@@ -1045,7 +1045,7 @@ future synchronization helpers should be thin wrappers over `vkCmdPipelineBarrie
   buffer path. That is outside this CPU preload change, but it is now the clear
   next bottleneck instead of gzip/decode.
 - Verification:
-  - `cmake --build build --target ds_vk_dfsph_app`
+  - `cmake --build build --target dans_vk_dfsph_app`
   - `./run.sh --app dfsph --scene-id dambreak_50k_600f_dfsph_v2 --show-mesh --hide-particles --smoke-frames 12 --screenshot run/dfsph_surface_preload_overlay.png`
   - `./.venv/bin/python scripts/validate_screenshot.py run/dfsph_surface_preload_overlay.png`
   - `./run.sh --app dfsph --scene-id dambreak_50k_600f_dfsph_v2 --show-mesh --hide-particles --hide-ui --smoke-frames 1200 --playback-speed 20 --profile`
@@ -1218,9 +1218,9 @@ future synchronization helpers should be thin wrappers over `vkCmdPipelineBarrie
 - Verification after the compact surface format:
   - `cmake --build build`
   - `ctest --test-dir build --output-on-failure`
-  - `clang-format --dry-run --Werror app/dfsph_main.cpp ds_vk/mesh.hpp ds_vk/mesh.cpp ds_vk/runtime.hpp ds_vk/runtime.cpp ds_vk/shaders/mesh_position_normal.vert ds_vk/shaders/mesh_quantized_position_normal.vert ds_vk/shaders/shadow_quantized_position.vert`
-  - `clang-tidy -p build ds_vk/mesh.cpp`
-  - `clang-tidy -p build ds_vk/runtime.cpp`
+  - `clang-format --dry-run --Werror app/dfsph_main.cpp dans/vk/mesh.hpp dans/vk/mesh.cpp dans/vk/runtime.hpp dans/vk/runtime.cpp dans/vk/shaders/mesh_position_normal.vert dans/vk/shaders/mesh_quantized_position_normal.vert dans/vk/shaders/shadow_quantized_position.vert`
+  - `clang-tidy -p build dans/vk/mesh.cpp`
+  - `clang-tidy -p build dans/vk/runtime.cpp`
   - `clang-tidy -p build app/dfsph_main.cpp`
   - `clang-tidy -p build tests/test_main.cpp`
   - `git diff --check`

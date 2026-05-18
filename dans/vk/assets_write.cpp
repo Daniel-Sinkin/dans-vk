@@ -1,4 +1,4 @@
-#include "ds_vk/assets.hpp"
+#include "dans/vk/assets.hpp"
 
 #include <algorithm>
 #include <array>
@@ -14,7 +14,7 @@
 #include <string_view>
 #include <vector>
 
-namespace ds_vk
+namespace dans::vk
 {
 namespace
 {
@@ -404,4 +404,4 @@ auto write_gltf_scene(
     write_all_bytes(bin_path, binary);
     write_text(path, cfg.pretty ? document.dump(2) : document.dump());
 }
-}  // namespace ds_vk
+}  // namespace dans::vk

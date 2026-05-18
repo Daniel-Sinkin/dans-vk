@@ -16,7 +16,7 @@ Checks: >
   readability-inconsistent-declaration-parameter-name,
   readability-use-anyofallof
 WarningsAsErrors: '*'
-HeaderFilterRegex: '^(ds_vk|app|tests)/'
+HeaderFilterRegex: '^(dans/vk|app|tests)/'
 CheckOptions:
   - key: readability-identifier-naming.NamespaceCase
     value: lower_case

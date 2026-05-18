@@ -1,6 +1,6 @@
-#include "ds_vk/runtime.hpp"
+#include "dans/vk/runtime.hpp"
 
-#include "ds_vk/math.hpp"
+#include "dans/vk/math.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
@@ -31,7 +31,7 @@
 #include <utility>
 #include <vector>
 
-namespace ds_vk
+namespace dans::vk
 {
 namespace
 {
@@ -1341,7 +1341,7 @@ auto Runtime::Impl::load_texture(
     if (textures.size() >= k_max_material_textures)
     {
         throw std::runtime_error(
-            std::format("ds_vk material texture table is full (max {})", k_max_material_textures)
+            std::format("dans_vk material texture table is full (max {})", k_max_material_textures)
         );
     }
 
@@ -1395,7 +1395,7 @@ auto Runtime::Impl::upload_texture_rgba(
     if (textures.size() >= k_max_material_textures)
     {
         throw std::runtime_error(
-            std::format("ds_vk material texture table is full (max {})", k_max_material_textures)
+            std::format("dans_vk material texture table is full (max {})", k_max_material_textures)
         );
     }
     if (width == 0u or height == 0u or pixels.size() != static_cast<usize>(width) * height)
@@ -1456,7 +1456,7 @@ auto Runtime::Impl::load_hdr_texture(
     if (textures.size() >= k_max_material_textures)
     {
         throw std::runtime_error(
-            std::format("ds_vk texture table is full (max {})", k_max_material_textures)
+            std::format("dans_vk texture table is full (max {})", k_max_material_textures)
         );
     }
 
@@ -1793,7 +1793,7 @@ auto Runtime::Impl::create_mesh_resource(
 {
     if (vma_allocator == VK_NULL_HANDLE)
     {
-        throw std::runtime_error("mesh allocation requires an initialized ds_vk::Runtime");
+        throw std::runtime_error("mesh allocation requires an initialized dans::vk::Runtime");
     }
     if (vertex_capacity == 0zu or index_capacity == 0zu)
     {
@@ -2524,7 +2524,7 @@ auto Runtime::Impl::setup_vulkan(std::vector<const char*> instance_extensions) -
     app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     app_info.pApplicationName = config.window_title.c_str();
     app_info.applicationVersion = VK_MAKE_VERSION(0, 1, 0);
-    app_info.pEngineName = "ds_vk";
+    app_info.pEngineName = "dans_vk";
     app_info.engineVersion = VK_MAKE_VERSION(0, 1, 0);
     app_info.apiVersion = VK_API_VERSION_1_2;
 
@@ -2571,13 +2571,13 @@ auto Runtime::Impl::setup_vulkan(std::vector<const char*> instance_extensions) -
     vulkan_api_version = std::min(physical_device_properties.apiVersion, VK_API_VERSION_1_2);
     if (physical_device_properties.limits.maxPushConstantsSize < k_required_push_constant_bytes)
     {
-        throw std::runtime_error("physical device maxPushConstantsSize is too small for ds_vk");
+        throw std::runtime_error("physical device maxPushConstantsSize is too small for dans_vk");
     }
     if (static_cast<usize>(physical_device_properties.limits.maxPerStageDescriptorSamplers)
         < k_max_material_textures + 1zu)
     {
         throw std::runtime_error(
-            "physical device maxPerStageDescriptorSamplers is too small for ds_vk"
+            "physical device maxPerStageDescriptorSamplers is too small for dans_vk"
         );
     }
 
@@ -2813,7 +2813,7 @@ auto Runtime::Impl::create_pipelines() -> void
     destroy_pipelines();
 
     const auto shader_dir =
-        config.shader_dir.empty() ? std::filesystem::path{DS_VK_SHADER_DIR} : config.shader_dir;
+        config.shader_dir.empty() ? std::filesystem::path{DANS_VK_SHADER_DIR} : config.shader_dir;
 
     const auto mesh_vert = create_shader_module(device, shader_dir / "mesh.vert.spv");
     const auto mesh_position_normal_vert =
@@ -3913,7 +3913,7 @@ auto Runtime::Impl::draw_runtime_ui() -> void
 {
     ImGui::SetNextWindowPos(ImVec2{20.0f, 20.0f}, ImGuiCond_Once);
     ImGui::SetNextWindowSize(ImVec2{500.0f, 260.0f}, ImGuiCond_Once);
-    if (!ImGui::Begin("ds_vk Camera"))
+    if (!ImGui::Begin("dans_vk Camera"))
     {
         ImGui::End();
         return;
@@ -5059,4 +5059,4 @@ auto Runtime::descriptor_indexing_support() const noexcept -> const DescriptorIn
 {
     return impl_->descriptor_indexing;
 }
-}  // namespace ds_vk
+}  // namespace dans::vk

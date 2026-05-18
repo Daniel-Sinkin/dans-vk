@@ -4,7 +4,7 @@
 #include <concepts>
 #include <utility>
 
-namespace ds_vk
+namespace dans::vk
 {
 template <typename T, typename U, typename V>
     requires requires(T x, U lo, V hi) {
@@ -24,4 +24,4 @@ template <std::floating_point T>
     assert(lo <= hi);
     return lo <= x && x <= hi;
 }
-}  // namespace ds_vk
+}  // namespace dans::vk

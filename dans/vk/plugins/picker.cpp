@@ -1,12 +1,12 @@
-#include "ds_vk/plugins/picker.hpp"
+#include "dans/vk/plugins/picker.hpp"
 
-#include "ds_vk/camera.hpp"
-#include "ds_vk/math.hpp"
+#include "dans/vk/camera.hpp"
+#include "dans/vk/math.hpp"
 
 #include <algorithm>
 #include <cmath>
 
-namespace ds_vk
+namespace dans::vk
 {
 namespace
 {
@@ -266,4 +266,4 @@ auto Picker::target_count() const noexcept -> usize
 {
     return targets_.size();
 }
-}  // namespace ds_vk
+}  // namespace dans::vk

@@ -1,12 +1,12 @@
-#include "ds_vk/plugins/manipulator.hpp"
+#include "dans/vk/plugins/manipulator.hpp"
 
-#include "ds_vk/math.hpp"
+#include "dans/vk/math.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <glm/gtc/quaternion.hpp>
 
-namespace ds_vk
+namespace dans::vk
 {
 namespace
 {
@@ -248,4 +248,4 @@ auto Manipulator::active_ids() const noexcept -> std::span<const ObjectId>
     return std::span<const ObjectId>{active_ids_.data(), active_ids_.size()};
 }
 // clang-format on
-}  // namespace ds_vk
+}  // namespace dans::vk
