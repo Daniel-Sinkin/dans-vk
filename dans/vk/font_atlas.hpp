@@ -11,12 +11,17 @@
 namespace dans::vk
 {
 
+// atlas_* values are in atlas (texture) pixels and feed UV computations.
+// width/height/offset_*/advance are in logical pixels and feed quad layout,
+// matching the visual size the caller asked for regardless of HiDPI scaling.
 struct GlyphMetrics
 {
     u16 atlas_x{};
     u16 atlas_y{};
     u16 atlas_w{};
     u16 atlas_h{};
+    f32 width{};
+    f32 height{};
     f32 offset_x{};
     f32 offset_y{};
     f32 advance{};
@@ -34,6 +39,11 @@ struct FontBakeConfig
 {
     std::filesystem::path ttf_path{};
     f32 pixel_size{16.0f};
+    // Multiplier for atlas resolution. The atlas is actually baked at
+    // pixel_size * dpi_scale physical pixels so glyphs stay crisp on
+    // HiDPI displays, while glyph metrics stay in logical (pixel_size)
+    // units. Usually Runtime::load_font fills this for you.
+    f32 dpi_scale{1.0f};
     u32 first_codepoint{32u};
     u32 codepoint_count{96u};
     u32 atlas_width{512u};

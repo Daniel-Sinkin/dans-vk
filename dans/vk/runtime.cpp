@@ -1302,6 +1302,8 @@ struct Runtime::Impl
     auto ensure_shape_instance_buffer(usize frame_index, VkDeviceSize size) -> Buffer&;
     [[nodiscard]] auto current_world_vp(VkExtent2D extent) const noexcept -> Mat4;
     [[nodiscard]] auto is_2d_mode() const noexcept -> bool;
+    [[nodiscard]] auto logical_window_extent() const noexcept -> Vec2;
+    [[nodiscard]] auto compute_dpi_scale() const noexcept -> f32;
     auto draw_runtime_ui() -> void;
     auto handle_event(const SDL_Event&) -> void;
     [[nodiscard]] auto framebuffer_mouse_position(f32 window_x, f32 window_y) const -> Vec2;
@@ -4430,26 +4432,13 @@ auto append_text_instances(
             {
                 out.push_back(
                     TextInstance{
-                        .position =
-                            Vec2{
-                                cursor.x + glyph->offset_x * scale,
-                                cursor.y + glyph->offset_y * scale
-                            },
-                        .size =
-                            Vec2{
-                                static_cast<f32>(glyph->atlas_w) * scale,
-                                static_cast<f32>(glyph->atlas_h) * scale
-                            },
-                        .uv_position =
-                            Vec2{
-                                static_cast<f32>(glyph->atlas_x) * inv_atlas_w,
-                                static_cast<f32>(glyph->atlas_y) * inv_atlas_h
-                            },
-                        .uv_size =
-                            Vec2{
-                                static_cast<f32>(glyph->atlas_w) * inv_atlas_w,
-                                static_cast<f32>(glyph->atlas_h) * inv_atlas_h
-                            },
+                        .position
+                        = Vec2{cursor.x + glyph->offset_x * scale, cursor.y + glyph->offset_y * scale},
+                        .size = Vec2{glyph->width * scale, glyph->height * scale},
+                        .uv_position
+                        = Vec2{static_cast<f32>(glyph->atlas_x) * inv_atlas_w, static_cast<f32>(glyph->atlas_y) * inv_atlas_h},
+                        .uv_size
+                        = Vec2{static_cast<f32>(glyph->atlas_w) * inv_atlas_w, static_cast<f32>(glyph->atlas_h) * inv_atlas_h},
                         .color = to_vec4(cmd.color),
                     }
                 );
@@ -4459,18 +4448,18 @@ auto append_text_instances(
     }
 }
 
-[[nodiscard]] auto screen_space_view_projection(VkExtent2D extent) noexcept -> Mat4
+[[nodiscard]] auto screen_space_view_projection(Vec2 logical_extent) noexcept -> Mat4
 {
-    const auto width = static_cast<f32>(std::max(1u, extent.width));
-    const auto height = static_cast<f32>(std::max(1u, extent.height));
+    const auto width = std::max(1.0f, logical_extent.x);
+    const auto height = std::max(1.0f, logical_extent.y);
     return glm::orthoRH_ZO(0.0f, width, 0.0f, height, -1.0f, 1.0f);
 }
 
-[[nodiscard]] auto world_view_projection_2d(VkExtent2D extent, Vec2 pivot, f32 zoom) noexcept
+[[nodiscard]] auto world_view_projection_2d(Vec2 logical_extent, Vec2 pivot, f32 zoom) noexcept
     -> Mat4
 {
-    const auto width = static_cast<f32>(std::max(1u, extent.width));
-    const auto height = static_cast<f32>(std::max(1u, extent.height));
+    const auto width = std::max(1.0f, logical_extent.x);
+    const auto height = std::max(1.0f, logical_extent.y);
     const auto half_w = 0.5f * width * zoom;
     const auto half_h = 0.5f * height * zoom;
     return glm::orthoRH_ZO(
@@ -4533,7 +4522,9 @@ auto Runtime::Impl::draw_text(
 
     if (screen_count > 0u)
     {
-        const TextPushConstants push{.view_projection = screen_space_view_projection(extent)};
+        const TextPushConstants push{
+            .view_projection = screen_space_view_projection(logical_window_extent()),
+        };
         vkCmdPushConstants(
             command_buffer, text_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push), &push
         );
@@ -4670,7 +4661,9 @@ auto Runtime::Impl::draw_shapes(
 
     if (screen_count > 0u)
     {
-        const ShapePushConstants push{.view_projection = screen_space_view_projection(extent)};
+        const ShapePushConstants push{
+            .view_projection = screen_space_view_projection(logical_window_extent()),
+        };
         vkCmdPushConstants(
             command_buffer,
             shape_pipeline_layout,
@@ -4697,11 +4690,43 @@ auto Runtime::Impl::is_2d_mode() const noexcept -> bool
     return config.render_mode == RenderMode::two_d;
 }
 
+auto Runtime::Impl::logical_window_extent() const noexcept -> Vec2
+{
+    if (window == nullptr)
+    {
+        return Vec2{1.0f, 1.0f};
+    }
+    auto width = 1;
+    auto height = 1;
+    SDL_GetWindowSize(window, &width, &height);
+    return Vec2{
+        static_cast<f32>(std::max(1, width)),
+        static_cast<f32>(std::max(1, height)),
+    };
+}
+
+auto Runtime::Impl::compute_dpi_scale() const noexcept -> f32
+{
+    if (window == nullptr)
+    {
+        return 1.0f;
+    }
+    auto window_width = 1;
+    auto window_height = 1;
+    auto framebuffer_width = 1;
+    auto framebuffer_height = 1;
+    SDL_GetWindowSize(window, &window_width, &window_height);
+    SDL_GetWindowSizeInPixels(window, &framebuffer_width, &framebuffer_height);
+    const auto sx = static_cast<f32>(framebuffer_width) / static_cast<f32>(std::max(1, window_width));
+    const auto sy = static_cast<f32>(framebuffer_height) / static_cast<f32>(std::max(1, window_height));
+    return std::max(sx, sy);
+}
+
 auto Runtime::Impl::current_world_vp(const VkExtent2D extent) const noexcept -> Mat4
 {
     if (is_2d_mode())
     {
-        return world_view_projection_2d(extent, camera_2d_pivot, camera_2d_zoom);
+        return world_view_projection_2d(logical_window_extent(), camera_2d_pivot, camera_2d_zoom);
     }
     const auto aspect = static_cast<f32>(std::max(1u, extent.width))
                         / static_cast<f32>(std::max(1u, extent.height));
@@ -4865,9 +4890,25 @@ auto Runtime::Impl::handle_event(const SDL_Event& event) -> void
             case SDLK_C:
                 input.key_c_pressed = true;
                 break;
+            case SDLK_N:
+                input.key_n_pressed = true;
+                break;
             case SDLK_RETURN:
             case SDLK_KP_ENTER:
                 input.key_enter_pressed = true;
+                break;
+            case SDLK_DELETE:
+            case SDLK_BACKSPACE:
+                input.key_delete_pressed = true;
+                break;
+            case SDLK_EQUALS:
+            case SDLK_PLUS:
+            case SDLK_KP_PLUS:
+                input.key_plus_pressed = true;
+                break;
+            case SDLK_MINUS:
+            case SDLK_KP_MINUS:
+                input.key_minus_pressed = true;
                 break;
             default:
                 break;
@@ -4935,21 +4976,12 @@ auto Runtime::Impl::handle_event(const SDL_Event& event) -> void
         auto framebuffer_width = 1;
         auto framebuffer_height = 1;
         SDL_GetWindowSizeInPixels(window, &framebuffer_width, &framebuffer_height);
-        auto window_width = 1;
-        auto window_height = 1;
-        SDL_GetWindowSize(window, &window_width, &window_height);
-        const auto fb_scale_x
-            = static_cast<f32>(framebuffer_width) / static_cast<f32>(std::max(1, window_width));
-        const auto fb_scale_y
-            = static_cast<f32>(framebuffer_height) / static_cast<f32>(std::max(1, window_height));
         if (is_2d_mode())
         {
             if (panning)
             {
-                const auto fb_dx = event.motion.xrel * fb_scale_x;
-                const auto fb_dy = event.motion.yrel * fb_scale_y;
-                camera_2d_pivot.x -= fb_dx * camera_2d_zoom;
-                camera_2d_pivot.y -= fb_dy * camera_2d_zoom;
+                camera_2d_pivot.x -= event.motion.xrel * camera_2d_zoom;
+                camera_2d_pivot.y -= event.motion.yrel * camera_2d_zoom;
             }
         }
         else if (orbiting)
@@ -4978,14 +5010,9 @@ auto Runtime::Impl::handle_event(const SDL_Event& event) -> void
     {
         if (is_2d_mode())
         {
-            auto framebuffer_width = 1;
-            auto framebuffer_height = 1;
-            SDL_GetWindowSizeInPixels(window, &framebuffer_width, &framebuffer_height);
+            const auto extent = logical_window_extent();
             const auto cursor_px = input.mouse_px;
-            const Vec2 center_px{
-                0.5f * static_cast<f32>(std::max(1, framebuffer_width)),
-                0.5f * static_cast<f32>(std::max(1, framebuffer_height)),
-            };
+            const Vec2 center_px{0.5f * extent.x, 0.5f * extent.y};
             const auto zoom_factor = std::exp(-event.wheel.y * 0.12f);
             const auto new_zoom = std::clamp(camera_2d_zoom * zoom_factor, 0.001f, 1000.0f);
             const auto delta_zoom = camera_2d_zoom - new_zoom;
@@ -5005,17 +5032,10 @@ auto Runtime::Impl::handle_event(const SDL_Event& event) -> void
 
 auto Runtime::Impl::framebuffer_mouse_position(f32 window_x, f32 window_y) const -> Vec2
 {
-    auto window_width = 1;
-    auto window_height = 1;
-    auto framebuffer_width = 1;
-    auto framebuffer_height = 1;
-    SDL_GetWindowSize(window, &window_width, &window_height);
-    SDL_GetWindowSizeInPixels(window, &framebuffer_width, &framebuffer_height);
-    const auto scale_x =
-        static_cast<f32>(framebuffer_width) / static_cast<f32>(std::max(1, window_width));
-    const auto scale_y =
-        static_cast<f32>(framebuffer_height) / static_cast<f32>(std::max(1, window_height));
-    return Vec2{window_x * scale_x, window_y * scale_y};
+    // mouse_px is in logical pixels so all screen-space coordinates (UI text,
+    // shapes, radial menu, mouse-to-world conversion in 2D mode) match what a
+    // user perceives regardless of HiDPI scaling.
+    return Vec2{window_x, window_y};
 }
 
 auto Runtime::Impl::current_modifiers() const noexcept -> KeyboardModifiers
@@ -5043,7 +5063,11 @@ auto Runtime::Impl::reset_input_frame() -> void
     input.key_y_pressed = false;
     input.key_z_pressed = false;
     input.key_c_pressed = false;
+    input.key_n_pressed = false;
     input.key_enter_pressed = false;
+    input.key_delete_pressed = false;
+    input.key_plus_pressed = false;
+    input.key_minus_pressed = false;
     input.mouse_px = framebuffer_mouse_position(mouse_x, mouse_y);
     input.mouse_captured_by_ui = ImGui::GetIO().WantCaptureMouse;
     const auto mods = current_modifiers();
@@ -5934,7 +5958,12 @@ auto Runtime::imgui_texture_id(TextureHandle handle) -> uptr
 
 auto Runtime::load_font(const FontBakeConfig& config) -> void
 {
-    impl_->load_font(config);
+    auto bake_config = config;
+    if (bake_config.dpi_scale <= 0.0f or bake_config.dpi_scale == 1.0f)
+    {
+        bake_config.dpi_scale = impl_->compute_dpi_scale();
+    }
+    impl_->load_font(bake_config);
 }
 
 auto Runtime::font() const noexcept -> const BakedFont&
@@ -6000,9 +6029,19 @@ auto Runtime::framebuffer_extent() const noexcept -> Vec2
     return Vec2{static_cast<f32>(width), static_cast<f32>(height)};
 }
 
+auto Runtime::logical_extent() const noexcept -> Vec2
+{
+    return impl_->logical_window_extent();
+}
+
+auto Runtime::dpi_scale() const noexcept -> f32
+{
+    return impl_->compute_dpi_scale();
+}
+
 auto Runtime::screen_to_world_2d(Vec2 pixel) const noexcept -> Vec2
 {
-    const auto extent = framebuffer_extent();
+    const auto extent = logical_extent();
     const Vec2 center{0.5f * extent.x, 0.5f * extent.y};
     return Vec2{
         impl_->camera_2d_pivot.x + (pixel.x - center.x) * impl_->camera_2d_zoom,

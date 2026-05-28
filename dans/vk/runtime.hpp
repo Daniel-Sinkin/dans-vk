@@ -318,7 +318,11 @@ struct InputState
     bool key_y_pressed{};
     bool key_z_pressed{};
     bool key_c_pressed{};
+    bool key_n_pressed{};
     bool key_enter_pressed{};
+    bool key_delete_pressed{};
+    bool key_plus_pressed{};
+    bool key_minus_pressed{};
     bool left_button_down{};
     bool shift_held{};
     bool control_held{};
@@ -438,6 +442,8 @@ class Runtime
     auto set_camera_2d(Vec2 pivot, f32 zoom)               noexcept -> void;
     [[nodiscard]] auto screen_to_world_2d(Vec2 pixel) const noexcept -> Vec2;
     [[nodiscard]] auto framebuffer_extent()          const noexcept -> Vec2;
+    [[nodiscard]] auto logical_extent()              const noexcept -> Vec2;
+    [[nodiscard]] auto dpi_scale()                   const noexcept -> f32;
     [[nodiscard]] auto stats()                       const noexcept -> const RuntimeStats&;
     [[nodiscard]] auto descriptor_indexing_support() const noexcept -> const DescriptorIndexingSupport&;
     // clang-format on

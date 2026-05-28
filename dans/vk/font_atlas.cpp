@@ -62,6 +62,9 @@ auto bake_font(const FontBakeConfig& config) -> BakedFont
     {
         throw std::runtime_error("bake_font: pixel_size must be positive");
     }
+    const auto dpi_scale = (config.dpi_scale > 0.0f) ? config.dpi_scale : 1.0f;
+    const auto inv_dpi = 1.0f / dpi_scale;
+    const auto baked_pixel_size = config.pixel_size * dpi_scale;
 
     const auto ttf_bytes = read_file_bytes(config.ttf_path);
 
@@ -87,7 +90,7 @@ auto bake_font(const FontBakeConfig& config) -> BakedFont
     const auto bake_result = stbtt_BakeFontBitmap(
         ttf_bytes.data(),
         0,
-        config.pixel_size,
+        baked_pixel_size,
         result.pixels.data(),
         static_cast<int>(config.atlas_width),
         static_cast<int>(config.atlas_height),
@@ -98,11 +101,12 @@ auto bake_font(const FontBakeConfig& config) -> BakedFont
     if (bake_result <= 0)
     {
         throw std::runtime_error(std::format(
-            "bake_font: atlas {}x{} could not fit {} glyphs at {}px",
+            "bake_font: atlas {}x{} could not fit {} glyphs at {}px (dpi_scale {})",
             config.atlas_width,
             config.atlas_height,
             config.codepoint_count,
-            static_cast<f64>(config.pixel_size)
+            static_cast<f64>(config.pixel_size),
+            static_cast<f64>(dpi_scale)
         ));
     }
 
@@ -110,10 +114,10 @@ auto bake_font(const FontBakeConfig& config) -> BakedFont
     int descent{};
     int line_gap{};
     stbtt_GetFontVMetrics(&info, &ascent, &descent, &line_gap);
-    const auto scale = stbtt_ScaleForPixelHeight(&info, config.pixel_size);
-    result.metrics.ascent = static_cast<f32>(ascent) * scale;
-    result.metrics.descent = static_cast<f32>(descent) * scale;
-    result.metrics.line_gap = static_cast<f32>(line_gap) * scale;
+    const auto scale = stbtt_ScaleForPixelHeight(&info, baked_pixel_size);
+    result.metrics.ascent = static_cast<f32>(ascent) * scale * inv_dpi;
+    result.metrics.descent = static_cast<f32>(descent) * scale * inv_dpi;
+    result.metrics.line_gap = static_cast<f32>(line_gap) * scale * inv_dpi;
     result.metrics.pixel_size = config.pixel_size;
 
     for (auto i = 0zu; i < chardata.size(); ++i)
@@ -124,9 +128,11 @@ auto bake_font(const FontBakeConfig& config) -> BakedFont
         dst.atlas_y = static_cast<u16>(src.y0);
         dst.atlas_w = static_cast<u16>(src.x1 - src.x0);
         dst.atlas_h = static_cast<u16>(src.y1 - src.y0);
-        dst.offset_x = src.xoff;
-        dst.offset_y = src.yoff;
-        dst.advance = src.xadvance;
+        dst.width = static_cast<f32>(dst.atlas_w) * inv_dpi;
+        dst.height = static_cast<f32>(dst.atlas_h) * inv_dpi;
+        dst.offset_x = src.xoff * inv_dpi;
+        dst.offset_y = src.yoff * inv_dpi;
+        dst.advance = src.xadvance * inv_dpi;
     }
     return result;
 }
