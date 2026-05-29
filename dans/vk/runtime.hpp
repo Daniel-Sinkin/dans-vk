@@ -319,16 +319,24 @@ struct InputState
     bool key_z_pressed{};
     bool key_c_pressed{};
     bool key_n_pressed{};
+    bool key_l_pressed{};
+    bool key_m_pressed{};
+    bool key_o_pressed{};
+    bool key_p_pressed{};
+    bool key_left_pressed{};
+    bool key_right_pressed{};
     bool key_enter_pressed{};
     bool key_delete_pressed{};
     bool key_plus_pressed{};
     bool key_minus_pressed{};
     bool left_button_down{};
+    bool right_button_down{};
     bool shift_held{};
     bool control_held{};
     bool alt_held{};
     bool super_held{};
     MouseClick left_click{};
+    MouseClick right_click{};
 };
 
 struct FrameContext

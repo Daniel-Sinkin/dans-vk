@@ -1,8 +1,19 @@
 // app/main_2d.cpp
 //
-// Self-contained tensor network visualiser app on top of dans-vk.
-// Excluded from this draft: contraction, Julia/HTTP interop, JSONL loading.
+// Native tensor network visualiser app. Renders the same data model
+// the HTML/JS visualiser uses, loads .json / .jsonl envelope files,
+// and POSTs to the Julia /contract server.
 //
+// What lives in this file: the SDL/Vulkan glue + the interactive
+// visualiser. Data structures, envelope serde, HTTP client, template
+// builders and JSONL loader live under app/viz/ as headers so the whole
+// app moves cleanly to its own repo with main_2d.cpp + app/viz/ in tow.
+//
+#include "app/viz/envelope.hpp"
+#include "app/viz/jsonl.hpp"
+#include "app/viz/julia_client.hpp"
+#include "app/viz/templates.hpp"
+#include "app/viz/types.hpp"
 #include "dans/vk/math.hpp"
 #include "dans/vk/runtime.hpp"
 #include "dans/vk/shape_draw.hpp"
@@ -14,6 +25,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <exception>
+#include <filesystem>
 #include <format>
 #include <iostream>
 #include <map>
@@ -21,6 +33,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 //
@@ -28,269 +42,115 @@
 namespace
 {
 
-using dans::vk::Color;
+using viz::Abstraction;
+using viz::Bond;
+using viz::Color;
+using viz::f32;
+using viz::f64;
+using viz::Frame;
+using viz::i32;
+using viz::JuliaClient;
+using viz::JuliaClientConfig;
+using viz::Tensor;
+using viz::u32;
+using viz::u8;
+using viz::usize;
+using viz::Vec2;
 using dans::vk::FrameContext;
 using dans::vk::Runtime;
-using dans::vk::Vec2;
-using dans::vk::f32;
-using dans::vk::f64;
-using dans::vk::i32;
-using dans::vk::u32;
-using dans::vk::u8;
-using dans::vk::usize;
+using dans::vk::with_alpha;
 
 // ============================================================================
-// Constants
+// Rendering constants
 // ============================================================================
 
-constexpr f32 k_node_min_radius = 22.0f;
-constexpr f32 k_node_radius_step = 3.0f;
+constexpr f32 k_node_min_radius = 24.0f;
+constexpr f32 k_node_radius_step = 3.5f;
+constexpr f32 k_node_max_radius = 60.0f;
+constexpr f32 k_node_radius_r0 = 18.0f;
 constexpr f32 k_node_bevel_ratio = 0.32f;
 
-constexpr f32 k_leg_length = 32.0f;
+constexpr f32 k_leg_length = 30.0f;
 constexpr f32 k_leg_thickness = 2.5f;
-constexpr f32 k_leg_tip_radius = 3.8f;
+constexpr f32 k_leg_tip_radius = 3.6f;
 constexpr f32 k_leg_hit_radius = 14.0f;
 
 constexpr f32 k_bond_thickness = 3.0f;
-constexpr f32 k_bond_lane_spacing = 18.0f;
+constexpr f32 k_bond_lane_offset = 16.0f;
 
 constexpr f32 k_grid_spacing = 50.0f;
 
 constexpr i32 k_radial_outer_count = 8;
-constexpr f32 k_radial_inner_radius = 38.0f;
+constexpr f32 k_radial_inner_radius = 36.0f;
 constexpr f32 k_radial_outer_radius = 100.0f;
 
 constexpr f32 k_drag_threshold_px = 4.0f;
 
-// ============================================================================
-// Color helpers
-// ============================================================================
-
-[[nodiscard]] auto tag_color(std::string_view tag) noexcept -> Color
-{
-    if (tag == "phys")
-    {
-        return Color{0.95f, 0.43f, 0.40f, 1.0f};
-    }
-    if (tag == "hlink")
-    {
-        return Color{0.45f, 0.78f, 0.50f, 1.0f};
-    }
-    if (tag == "vlink")
-    {
-        return Color{0.46f, 0.74f, 1.0f, 1.0f};
-    }
-    return Color{0.67f, 0.72f, 0.80f, 1.0f};
-}
-
-[[nodiscard]] auto rank_color(i32 rank) noexcept -> Color
-{
-    switch (rank)
-    {
-        case 0:
-            return Color{0.36f, 0.40f, 0.50f, 1.0f};
-        case 1:
-            return Color{0.36f, 0.62f, 0.92f, 1.0f};
-        case 2:
-            return Color{0.95f, 0.55f, 0.30f, 1.0f};
-        case 3:
-            return Color{0.46f, 0.80f, 0.55f, 1.0f};
-        case 4:
-            return Color{0.88f, 0.55f, 0.88f, 1.0f};
-        case 5:
-            return Color{0.95f, 0.85f, 0.45f, 1.0f};
-        case 6:
-            return Color{0.85f, 0.65f, 0.40f, 1.0f};
-        default:
-            return Color{0.65f, 0.70f, 0.78f, 1.0f};
-    }
-}
-
 [[nodiscard]] auto node_radius(i32 rank) noexcept -> f32
 {
-    return k_node_min_radius + k_node_radius_step * static_cast<f32>(std::clamp(rank, 0, 5));
+    if (rank == 0)
+    {
+        return k_node_radius_r0;
+    }
+    return std::min(k_node_max_radius, k_node_min_radius + static_cast<f32>(rank) * k_node_radius_step);
 }
 
-using dans::vk::with_alpha;
-
 // ============================================================================
-// Scene types
+// Lookup helpers
 // ============================================================================
 
-struct LegInfo
+[[nodiscard]] auto find_tensor(Frame& f, u32 id) -> Tensor*
 {
-    std::vector<std::string> tags{};
-    i32 prime_level{};
-    f32 angle{};
-};
+    for (auto& t : f.tensors)
+    {
+        if (t.id == id)
+        {
+            return &t;
+        }
+    }
+    return nullptr;
+}
 
-struct Tensor
+[[nodiscard]] auto find_tensor(const Frame& f, u32 id) -> const Tensor*
 {
-    u32 id{};
-    Vec2 position{};
-    i32 rank{};
-    Color color{};
-    std::string label{};
-    std::vector<LegInfo> legs{};
-};
+    for (const auto& t : f.tensors)
+    {
+        if (t.id == id)
+        {
+            return &t;
+        }
+    }
+    return nullptr;
+}
 
-struct Bond
+[[nodiscard]] auto is_leg_bonded(const Frame& f, u32 tensor_id, i32 leg_index) -> bool
 {
-    u32 id{};
-    u32 tensor_a{};
-    i32 leg_a{};
-    u32 tensor_b{};
-    i32 leg_b{};
-    i32 prime_level{};
-    std::vector<std::string> tags{};
-};
+    for (const auto& b : f.bonds)
+    {
+        if ((b.a == tensor_id and b.ai == leg_index) or (b.b == tensor_id and b.bi == leg_index))
+        {
+            return true;
+        }
+    }
+    return false;
+}
 
-struct Abstraction
+[[nodiscard]] auto bonded_partner(const Frame& f, u32 tensor_id, i32 leg_index)
+    -> std::optional<u32>
 {
-    std::string type_name{};
-    std::vector<u32> tensor_ids{};
-};
-
-class Scene
-{
-  public:
-    std::vector<Tensor> tensors{};
-    std::vector<Bond> bonds{};
-    std::vector<Abstraction> abstractions{};
-
-    auto allocate_id() noexcept -> u32
+    for (const auto& b : f.bonds)
     {
-        return next_id_++;
-    }
-
-    [[nodiscard]] auto tensor_by_id(u32 id) -> Tensor*
-    {
-        for (auto& t : tensors)
+        if (b.a == tensor_id and b.ai == leg_index)
         {
-            if (t.id == id)
-            {
-                return &t;
-            }
+            return b.b;
         }
-        return nullptr;
-    }
-
-    [[nodiscard]] auto tensor_by_id(u32 id) const -> const Tensor*
-    {
-        for (const auto& t : tensors)
+        if (b.b == tensor_id and b.bi == leg_index)
         {
-            if (t.id == id)
-            {
-                return &t;
-            }
+            return b.a;
         }
-        return nullptr;
     }
-
-    [[nodiscard]] auto bond_by_id(u32 id) -> Bond*
-    {
-        for (auto& b : bonds)
-        {
-            if (b.id == id)
-            {
-                return &b;
-            }
-        }
-        return nullptr;
-    }
-
-    auto add_tensor(Vec2 position, i32 rank, std::string label = {}) -> u32
-    {
-        const auto id = allocate_id();
-        if (label.empty())
-        {
-            label = std::format("T{}", id);
-        }
-        tensors.push_back(
-            Tensor{
-                .id = id,
-                .position = position,
-                .rank = rank,
-                .color = rank_color(rank),
-                .label = std::move(label),
-                .legs = std::vector<LegInfo>(static_cast<usize>(std::max(0, rank))),
-            }
-        );
-        return id;
-    }
-
-    auto add_bond(u32 ta, i32 la, u32 tb, i32 lb, std::string tag, i32 prime = 0) -> u32
-    {
-        const auto id = allocate_id();
-        std::vector<std::string> tags;
-        if (not tag.empty())
-        {
-            tags.push_back(std::move(tag));
-        }
-        bonds.push_back(
-            Bond{
-                .id = id,
-                .tensor_a = ta,
-                .leg_a = la,
-                .tensor_b = tb,
-                .leg_b = lb,
-                .prime_level = prime,
-                .tags = std::move(tags),
-            }
-        );
-        return id;
-    }
-
-    [[nodiscard]] auto is_leg_bonded(u32 tensor_id, i32 leg_index) const -> bool
-    {
-        for (const auto& b : bonds)
-        {
-            if ((b.tensor_a == tensor_id and b.leg_a == leg_index)
-                or (b.tensor_b == tensor_id and b.leg_b == leg_index))
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    [[nodiscard]] auto bonded_partner(u32 tensor_id, i32 leg_index) const -> std::optional<u32>
-    {
-        for (const auto& b : bonds)
-        {
-            if (b.tensor_a == tensor_id and b.leg_a == leg_index)
-            {
-                return b.tensor_b;
-            }
-            if (b.tensor_b == tensor_id and b.leg_b == leg_index)
-            {
-                return b.tensor_a;
-            }
-        }
-        return std::nullopt;
-    }
-
-    auto delete_tensor(u32 id) -> void
-    {
-        std::erase_if(bonds, [id](const Bond& b) {
-            return b.tensor_a == id or b.tensor_b == id;
-        });
-        for (auto& a : abstractions)
-        {
-            std::erase(a.tensor_ids, id);
-        }
-        std::erase_if(tensors, [id](const Tensor& t) { return t.id == id; });
-    }
-
-    auto delete_bond(u32 id) -> void
-    {
-        std::erase_if(bonds, [id](const Bond& b) { return b.id == id; });
-    }
-
-  private:
-    u32 next_id_{1};
-};
+    return std::nullopt;
+}
 
 // ============================================================================
 // Geometry helpers
@@ -321,50 +181,114 @@ class Scene
     return Vec2{-v.y, v.x};
 }
 
-// Bonded leg direction = unit vector from tensor center toward partner.
-[[nodiscard]] auto leg_direction(const Scene& scene, const Tensor& t, i32 leg_index) noexcept -> Vec2
+[[nodiscard]] auto leg_direction(const Frame& f, const Tensor& t, i32 leg_index) noexcept -> Vec2
 {
-    const auto partner_id = scene.bonded_partner(t.id, leg_index);
-    if (partner_id.has_value())
+    const auto partner = bonded_partner(f, t.id, leg_index);
+    if (partner.has_value())
     {
-        const auto* partner = scene.tensor_by_id(*partner_id);
-        if (partner != nullptr)
+        const auto* p = find_tensor(f, *partner);
+        if (p != nullptr)
         {
-            return normalize_or(partner->position - t.position, Vec2{1.0f, 0.0f});
+            return normalize_or(Vec2{p->x - t.x, p->y - t.y}, Vec2{1.0f, 0.0f});
         }
     }
-    if (leg_index < 0 or leg_index >= static_cast<i32>(t.legs.size()))
+    if (leg_index < 0 or static_cast<usize>(leg_index) >= t.leg_angles.size())
     {
         return Vec2{1.0f, 0.0f};
     }
-    const auto a = t.legs[static_cast<usize>(leg_index)].angle;
+    const auto a = t.leg_angles[static_cast<usize>(leg_index)];
     return Vec2{std::cos(a), std::sin(a)};
 }
 
-[[nodiscard]] auto leg_anchor(const Scene& scene, const Tensor& t, i32 leg_index) noexcept -> Vec2
+// Ray-cast from the tensor center along angle `a` to the rounded-rect boundary.
+// Mirrors legAnchor() in tensor-network-visualiser.html: corner radius is
+// r * k_node_bevel_ratio (clamped to >= 4 px), flat edges between corners.
+// Returns the contact point and the outward boundary normal.
+struct LegAnchor
 {
-    const auto dir = leg_direction(scene, t, leg_index);
-    const auto r = node_radius(t.rank);
-    return Vec2{t.position.x + dir.x * r, t.position.y + dir.y * r};
-}
+    Vec2 point{};
+    Vec2 normal{};
+};
 
-[[nodiscard]] auto leg_tip(const Scene& scene, const Tensor& t, i32 leg_index) noexcept -> Vec2
+[[nodiscard]] auto leg_anchor_geom(Vec2 center, f32 r, f32 a) noexcept -> LegAnchor
 {
-    const auto dir = leg_direction(scene, t, leg_index);
-    const auto r = node_radius(t.rank);
-    const auto extent = r + k_leg_length;
-    return Vec2{t.position.x + dir.x * extent, t.position.y + dir.y * extent};
-}
-
-// Multi-lane offset (in world units) for a bond inside a group of N parallel bonds.
-[[nodiscard]] auto lane_offset(i32 lane_index, i32 total) noexcept -> f32
-{
-    if (total <= 1)
+    const auto corner = std::max(4.0f, r * k_node_bevel_ratio);
+    const auto flat = r - corner;
+    const auto ca = std::cos(a);
+    const auto sa = std::sin(a);
+    const auto ax = std::fabs(ca);
+    const auto ay = std::fabs(sa);
+    if (ax < 1e-9f and ay < 1e-9f)
     {
-        return 0.0f;
+        return LegAnchor{.point = Vec2{center.x + r, center.y}, .normal = Vec2{1.0f, 0.0f}};
     }
-    const auto center = (static_cast<f32>(total) - 1.0f) * 0.5f;
-    return (static_cast<f32>(lane_index) - center) * k_bond_lane_spacing;
+    const auto s = std::max(ax, ay);
+    const auto k = r / s;
+    const auto ex = center.x + ca * k;
+    const auto ey = center.y + sa * k;
+    if (ax >= ay)
+    {
+        if (std::fabs(ey - center.y) <= flat)
+        {
+            return LegAnchor{
+                .point = Vec2{ex, ey},
+                .normal = Vec2{ca > 0.0f ? 1.0f : -1.0f, 0.0f},
+            };
+        }
+    }
+    else
+    {
+        if (std::fabs(ex - center.x) <= flat)
+        {
+            return LegAnchor{
+                .point = Vec2{ex, ey},
+                .normal = Vec2{0.0f, sa > 0.0f ? 1.0f : -1.0f},
+            };
+        }
+    }
+    const auto sx = ca > 0.0f ? 1.0f : -1.0f;
+    const auto sy = sa > 0.0f ? 1.0f : -1.0f;
+    const auto ccx = center.x + sx * flat;
+    const auto ccy = center.y + sy * flat;
+    const auto dx = ccx - center.x;
+    const auto dy = ccy - center.y;
+    const auto B = -2.0f * (dx * ca + dy * sa);
+    const auto C = dx * dx + dy * dy - corner * corner;
+    const auto disc = B * B - 4.0f * C;
+    if (disc < 0.0f)
+    {
+        return LegAnchor{.point = Vec2{ex, ey}, .normal = Vec2{ca, sa}};
+    }
+    const auto ts = (-B + std::sqrt(disc)) * 0.5f;
+    const auto px = center.x + ts * ca;
+    const auto py = center.y + ts * sa;
+    auto nx = px - ccx;
+    auto ny = py - ccy;
+    const auto nl = std::sqrt(nx * nx + ny * ny);
+    if (nl > 1e-6f)
+    {
+        nx /= nl;
+        ny /= nl;
+    }
+    else
+    {
+        nx = ca;
+        ny = sa;
+    }
+    return LegAnchor{.point = Vec2{px, py}, .normal = Vec2{nx, ny}};
+}
+
+[[nodiscard]] auto leg_anchor(const Frame& f, const Tensor& t, i32 leg_index) noexcept -> LegAnchor
+{
+    const auto dir = leg_direction(f, t, leg_index);
+    const auto a = std::atan2(dir.y, dir.x);
+    return leg_anchor_geom(Vec2{t.x, t.y}, node_radius(t.rank), a);
+}
+
+[[nodiscard]] auto leg_tip(const Frame& f, const Tensor& t, i32 leg_index) noexcept -> Vec2
+{
+    const auto anc = leg_anchor(f, t, leg_index);
+    return Vec2{anc.point.x + anc.normal.x * k_leg_length, anc.point.y + anc.normal.y * k_leg_length};
 }
 
 [[nodiscard]] auto quad_bezier(Vec2 a, Vec2 b, Vec2 c, f32 t) noexcept -> Vec2
@@ -400,21 +324,61 @@ struct RadialItem
     std::string label{};
 };
 
+struct AppArgs
+{
+    std::optional<std::filesystem::path> load_path{};
+    JuliaClientConfig julia{};
+    bool no_julia{};
+    bool seed_demo{true};
+};
+
 class Visualizer
 {
   public:
+    explicit Visualizer(AppArgs args) : args_(std::move(args))
+    {
+    }
+
     auto setup(Runtime& runtime) -> void
     {
         runtime_ = &runtime;
-        seed_scene();
-
+        if (not args_.no_julia)
+        {
+            julia_.emplace(args_.julia);
+            julia_available_ = julia_->healthz();
+            if (julia_available_)
+            {
+                set_status("Julia server reachable at " + args_.julia.host + ":"
+                           + std::to_string(args_.julia.port));
+            }
+            else
+            {
+                set_status(
+                    "Julia server NOT reachable at " + args_.julia.host + ":"
+                    + std::to_string(args_.julia.port)
+                );
+            }
+        }
+        if (args_.load_path.has_value())
+        {
+            load_path(*args_.load_path);
+        }
+        if (frames_.empty() and args_.seed_demo)
+        {
+            seed_demo_scene();
+        }
+        if (frames_.empty())
+        {
+            frames_.push_back(Frame{});
+        }
+        apply_frame(0);
         runtime.set_camera_2d(scene_center(), 1.1f);
 
 #if defined(DANS_VK_DEFAULT_FONT_PATH)
         runtime.load_font(
             {
                 .ttf_path = DANS_VK_DEFAULT_FONT_PATH,
-                .pixel_size = 26.0f,
+                .pixel_size = 22.0f,
             }
         );
 #endif
@@ -442,104 +406,153 @@ class Visualizer
 
   private:
     Runtime* runtime_{};
-    Scene scene_{};
+    AppArgs args_{};
+    std::optional<JuliaClient> julia_{};
+    bool julia_available_{};
 
+    std::vector<Frame> frames_{};
+    usize current_frame_{};
+    std::string frame_source_{};
+
+    Frame& live() noexcept
+    {
+        return frames_[current_frame_];
+    }
+    [[nodiscard]] const Frame& live() const noexcept
+    {
+        return frames_[current_frame_];
+    }
+
+    // Selection model follows the HTML: standalone tensors live in
+    // selected_tensors_, containers in selected_abstractions_, and a single
+    // drilled-into tensor (visual highlight inside a selected container) in
+    // inner_sel_.
     std::vector<u32> selected_tensors_{};
+    std::vector<u32> selected_abstractions_{};
+    std::optional<u32> inner_sel_{};
     std::optional<u32> hovered_tensor_{};
+    std::optional<u32> hovered_abstraction_{};
     std::optional<LegTarget> hovered_leg_{};
 
     MouseAction mouse_action_{MouseAction::idle};
     Vec2 mouse_press_world_{};
     Vec2 mouse_press_px_{};
+    std::vector<u32> drag_ids_{};
     std::vector<Vec2> drag_initial_positions_{};
     std::optional<LegTarget> rotating_leg_{};
-    f32 rotating_initial_angle_{};
     Vec2 box_min_world_{};
     Vec2 box_max_world_{};
 
     bool radial_open_{};
     Vec2 radial_center_px_{};
     i32 radial_hovered_{-1};
-    std::string radial_last_action_{};
 
+    std::string status_message_{};
+    f32 status_until_{};
     f32 elapsed_{};
 
-    // ------------------------------------------------------------------
-    // Scene setup
-    // ------------------------------------------------------------------
-
-    auto seed_scene() -> void
+    auto set_status(std::string message, f32 duration_seconds = 6.0f) -> void
     {
-        const f32 spacing = 130.0f;
-        const f32 mps_y = 0.0f;
-        const f32 mpo_y = 180.0f;
-        constexpr i32 n_mps = 8;
-        constexpr i32 n_mpo = 4;
+        status_message_ = std::move(message);
+        status_until_ = elapsed_ + duration_seconds;
+        std::cout << "[viz] " << status_message_ << '\n';
+    }
 
-        std::vector<u32> mps_ids;
-        for (i32 i = 0; i < n_mps; ++i)
+    // ------------------------------------------------------------------
+    // Scene seeding
+    // ------------------------------------------------------------------
+
+    auto seed_demo_scene() -> void
+    {
+        viz::IdCounters counters{.next_id = 1, .next_leg_id = 1, .next_bond_id = 1, .next_abs_id = 1};
+        auto mps = viz::build_mps(counters, 6, 4, 2, Vec2{0.0f, 0.0f});
+        auto mpo = viz::build_mpo(counters, 6, 3, 2, Vec2{0.0f, 200.0f});
+        Frame f;
+        f.name = "demo MPS + MPO";
+        f.source = "(built-in template)";
+        std::vector<Tensor> tensors;
+        std::vector<Bond> bonds;
+        std::vector<Abstraction> abstractions;
+        for (auto& t : mps.tensors)
         {
-            const auto rank = (i == 0 or i == n_mps - 1) ? 2 : 3;
-            const auto pos = Vec2{static_cast<f32>(i) * spacing, mps_y};
-            const auto id = scene_.add_tensor(pos, rank, std::format("T{}", i + 1));
-            mps_ids.push_back(id);
-            auto* tensor = scene_.tensor_by_id(id);
-            tensor->legs[0].tags = {"phys"};
-            tensor->legs[0].angle = std::numbers::pi_v<f32> * 0.5f;
+            tensors.push_back(std::move(t));
         }
-        for (i32 i = 0; i + 1 < n_mps; ++i)
+        for (auto& b : mps.bonds)
         {
-            const auto left_leg = (i == 0) ? 1 : 2;
-            scene_.add_bond(mps_ids[static_cast<usize>(i)], left_leg, mps_ids[static_cast<usize>(i + 1)], 1, "hlink");
+            bonds.push_back(std::move(b));
         }
-
-        std::vector<u32> mpo_ids;
-        for (i32 i = 0; i < n_mpo; ++i)
+        abstractions.push_back(std::move(mps.abstraction));
+        for (auto& t : mpo.tensors)
         {
-            const auto pos = Vec2{
-                (static_cast<f32>(i) + 0.5f) * spacing * 2.0f - spacing,
-                mpo_y,
-            };
-            const auto id = scene_.add_tensor(pos, 4, std::format("M{}", i + 1));
-            mpo_ids.push_back(id);
-            auto* tensor = scene_.tensor_by_id(id);
-            tensor->legs[0].tags = {"phys"};
-            tensor->legs[0].angle = std::numbers::pi_v<f32> * 0.5f;
-            tensor->legs[1].tags = {"phys"};
-            tensor->legs[1].angle = -std::numbers::pi_v<f32> * 0.5f;
+            tensors.push_back(std::move(t));
         }
+        for (auto& b : mpo.bonds)
+        {
+            bonds.push_back(std::move(b));
+        }
+        abstractions.push_back(std::move(mpo.abstraction));
+        viz::frame_finalize(f, std::move(tensors), std::move(bonds), std::move(abstractions));
+        f.next_id = counters.next_id;
+        f.next_leg_id = counters.next_leg_id;
+        f.next_bond_id = counters.next_bond_id;
+        f.next_abs_id = counters.next_abs_id;
+        frames_.push_back(std::move(f));
+        frame_source_ = "demo";
+    }
 
-        scene_.add_bond(mpo_ids[0], 2, mps_ids[0], 0, "vlink");
-        scene_.add_bond(mpo_ids[0], 3, mps_ids[1], 0, "vlink");
-        scene_.add_bond(mpo_ids[1], 2, mps_ids[2], 0, "vlink");
-        scene_.add_bond(mpo_ids[1], 3, mps_ids[3], 0, "vlink");
-        scene_.add_bond(mpo_ids[2], 2, mps_ids[4], 0, "vlink");
-        scene_.add_bond(mpo_ids[2], 3, mps_ids[5], 0, "vlink");
-        scene_.add_bond(mpo_ids[3], 2, mps_ids[6], 0, "vlink");
-        scene_.add_bond(mpo_ids[3], 3, mps_ids[7], 0, "vlink");
+    auto load_path(const std::filesystem::path& path) -> void
+    {
+        try
+        {
+            const Vec2 center{0.0f, 0.0f};
+            auto loaded = viz::load_envelope_folder(path, center);
+            if (loaded.frames.empty())
+            {
+                set_status("no frames found in " + path.string());
+                return;
+            }
+            frames_ = std::move(loaded.frames);
+            frame_source_ = std::move(loaded.source);
+            set_status(
+                "loaded " + std::to_string(frames_.size()) + " frame(s) from "
+                + path.string()
+            );
+        }
+        catch (const std::exception& e)
+        {
+            set_status(std::string{"load failed: "} + e.what(), 10.0f);
+        }
+    }
 
-        // Add a couple of demonstrative parallel bonds: extra hlinks across one pair
-        scene_.add_bond(mps_ids[2], 2, mps_ids[3], 1, "hlink");
-        scene_.add_bond(mps_ids[2], 2, mps_ids[3], 1, "vlink", 1);
-
-        scene_.abstractions.push_back({.type_name = "MPS", .tensor_ids = mps_ids});
-        scene_.abstractions.push_back({.type_name = "MPO", .tensor_ids = mpo_ids});
+    auto apply_frame(usize index) -> void
+    {
+        if (frames_.empty())
+        {
+            return;
+        }
+        current_frame_ = std::min(index, frames_.size() - 1);
+        clear_selection();
+        hovered_tensor_.reset();
+        hovered_leg_.reset();
+        hovered_abstraction_.reset();
+        mouse_action_ = MouseAction::idle;
     }
 
     [[nodiscard]] auto scene_center() const noexcept -> Vec2
     {
-        if (scene_.tensors.empty())
+        const auto& f = live();
+        if (f.tensors.empty())
         {
             return Vec2{0.0f, 0.0f};
         }
         f32 sx = 0.0f;
         f32 sy = 0.0f;
-        for (const auto& t : scene_.tensors)
+        for (const auto& t : f.tensors)
         {
-            sx += t.position.x;
-            sy += t.position.y;
+            sx += t.x;
+            sy += t.y;
         }
-        const auto n = static_cast<f32>(scene_.tensors.size());
+        const auto n = static_cast<f32>(f.tensors.size());
         return Vec2{sx / n, sy / n};
     }
 
@@ -547,13 +560,39 @@ class Visualizer
     // Selection helpers
     // ------------------------------------------------------------------
 
-    [[nodiscard]] auto is_selected(u32 id) const noexcept -> bool
+    [[nodiscard]] auto is_standalone_selected(u32 id) const noexcept -> bool
     {
         return std::find(selected_tensors_.begin(), selected_tensors_.end(), id)
                != selected_tensors_.end();
     }
 
-    auto toggle_selected(u32 id) -> void
+    [[nodiscard]] auto is_abs_selected(u32 abs_id) const noexcept -> bool
+    {
+        return std::find(selected_abstractions_.begin(), selected_abstractions_.end(), abs_id)
+               != selected_abstractions_.end();
+    }
+
+    // Tensor highlight: standalone-selected, or member of a selected container,
+    // or the drilled-into inner_sel_.
+    [[nodiscard]] auto is_selected(u32 id) const noexcept -> bool
+    {
+        if (is_standalone_selected(id))
+        {
+            return true;
+        }
+        if (inner_sel_.has_value() and *inner_sel_ == id)
+        {
+            return true;
+        }
+        const auto* t = find_tensor(live(), id);
+        if (t == nullptr or not t->abs_id.has_value())
+        {
+            return false;
+        }
+        return is_abs_selected(*t->abs_id);
+    }
+
+    auto toggle_standalone(u32 id) -> void
     {
         const auto it = std::find(selected_tensors_.begin(), selected_tensors_.end(), id);
         if (it == selected_tensors_.end())
@@ -566,17 +605,152 @@ class Visualizer
         }
     }
 
+    auto toggle_abstraction(u32 id) -> void
+    {
+        const auto it = std::find(
+            selected_abstractions_.begin(), selected_abstractions_.end(), id
+        );
+        if (it == selected_abstractions_.end())
+        {
+            selected_abstractions_.push_back(id);
+        }
+        else
+        {
+            selected_abstractions_.erase(it);
+        }
+    }
+
+    auto clear_selection() -> void
+    {
+        selected_tensors_.clear();
+        selected_abstractions_.clear();
+        inner_sel_.reset();
+    }
+
+    // Union of standalone-selected tensor ids and members of selected
+    // abstractions; used by drag-move and Delete.
+    [[nodiscard]] auto selection_tensor_set() const -> std::vector<u32>
+    {
+        std::vector<u32> out;
+        std::unordered_set<u32> seen;
+        for (const auto id : selected_tensors_)
+        {
+            if (seen.insert(id).second)
+            {
+                out.push_back(id);
+            }
+        }
+        for (const auto abs_id : selected_abstractions_)
+        {
+            for (const auto& a : live().abstractions)
+            {
+                if (a.id != abs_id)
+                {
+                    continue;
+                }
+                for (const auto m : a.members)
+                {
+                    if (seen.insert(m).second)
+                    {
+                        out.push_back(m);
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    [[nodiscard]] auto abstraction_bbox(const Abstraction& a) const
+        -> std::optional<std::array<f32, 4>>
+    {
+        if (a.members.empty())
+        {
+            return std::nullopt;
+        }
+        std::optional<f32> mn_x;
+        f32 mx_x = 0.0f;
+        f32 mn_y = 0.0f;
+        f32 mx_y = 0.0f;
+        f32 max_r = 0.0f;
+        for (const auto id : a.members)
+        {
+            const auto* t = find_tensor(live(), id);
+            if (t == nullptr)
+            {
+                continue;
+            }
+            const auto r = node_radius(t->rank);
+            max_r = std::max(max_r, r);
+            if (not mn_x.has_value())
+            {
+                mn_x = t->x;
+                mx_x = t->x;
+                mn_y = t->y;
+                mx_y = t->y;
+            }
+            else
+            {
+                mn_x = std::min(*mn_x, t->x);
+                mx_x = std::max(mx_x, t->x);
+                mn_y = std::min(mn_y, t->y);
+                mx_y = std::max(mx_y, t->y);
+            }
+        }
+        if (not mn_x.has_value())
+        {
+            return std::nullopt;
+        }
+        const auto pad = max_r + 40.0f;
+        return std::array<f32, 4>{*mn_x - pad, mx_x + pad, mn_y - pad, mx_y + pad};
+    }
+
+    auto seed_drag_positions() -> void
+    {
+        drag_ids_ = selection_tensor_set();
+        drag_initial_positions_.clear();
+        drag_initial_positions_.reserve(drag_ids_.size());
+        for (const auto id : drag_ids_)
+        {
+            if (const auto* t = find_tensor(live(), id); t != nullptr)
+            {
+                drag_initial_positions_.push_back(Vec2{t->x, t->y});
+            }
+            else
+            {
+                drag_initial_positions_.push_back(Vec2{0.0f, 0.0f});
+            }
+        }
+    }
+
+    [[nodiscard]] auto hit_abstraction(Vec2 world_pos) const -> std::optional<u32>
+    {
+        for (auto it = live().abstractions.rbegin(); it != live().abstractions.rend(); ++it)
+        {
+            const auto bb = abstraction_bbox(*it);
+            if (not bb.has_value())
+            {
+                continue;
+            }
+            if (world_pos.x >= (*bb)[0] and world_pos.x <= (*bb)[1]
+                and world_pos.y >= (*bb)[2] and world_pos.y <= (*bb)[3])
+            {
+                return it->id;
+            }
+        }
+        return std::nullopt;
+    }
+
     // ------------------------------------------------------------------
     // Hit testing
     // ------------------------------------------------------------------
 
     [[nodiscard]] auto hit_tensor(Vec2 world_pos) const -> std::optional<u32>
     {
-        for (auto it = scene_.tensors.rbegin(); it != scene_.tensors.rend(); ++it)
+        const auto& f = live();
+        for (auto it = f.tensors.rbegin(); it != f.tensors.rend(); ++it)
         {
             const auto r = node_radius(it->rank);
-            if (std::abs(world_pos.x - it->position.x) <= r
-                and std::abs(world_pos.y - it->position.y) <= r)
+            if (std::abs(world_pos.x - it->x) <= r and std::abs(world_pos.y - it->y) <= r)
             {
                 return it->id;
             }
@@ -588,15 +762,16 @@ class Visualizer
     {
         const auto zoom = runtime_->camera_2d_zoom();
         const auto threshold = k_leg_hit_radius * zoom;
-        for (const auto& t : scene_.tensors)
+        const auto& f = live();
+        for (const auto& t : f.tensors)
         {
             for (i32 leg_i = 0; leg_i < t.rank; ++leg_i)
             {
-                if (scene_.is_leg_bonded(t.id, leg_i))
+                if (is_leg_bonded(f, t.id, leg_i))
                 {
                     continue;
                 }
-                const auto tip = leg_tip(scene_, t, leg_i);
+                const auto tip = leg_tip(f, t, leg_i);
                 const auto d = world_pos - tip;
                 if (length2(d) <= threshold * threshold)
                 {
@@ -613,10 +788,15 @@ class Visualizer
         {
             hovered_tensor_ = std::nullopt;
             hovered_leg_ = std::nullopt;
+            hovered_abstraction_ = std::nullopt;
             return;
         }
         hovered_leg_ = hit_leg_tip(mouse_world);
         hovered_tensor_ = hovered_leg_.has_value() ? std::nullopt : hit_tensor(mouse_world);
+        hovered_abstraction_
+            = (hovered_leg_.has_value() or hovered_tensor_.has_value())
+                  ? std::nullopt
+                  : hit_abstraction(mouse_world);
 
         if (radial_open_)
         {
@@ -636,10 +816,16 @@ class Visualizer
     {
         if (radial_open_)
         {
-            if (input.left_click.occurred)
+            if (input.left_click.occurred or input.right_click.occurred)
             {
                 close_radial(true);
             }
+            return;
+        }
+
+        if (input.right_click.occurred and not input.mouse_captured_by_ui)
+        {
+            open_radial(input.mouse_px);
             return;
         }
 
@@ -648,52 +834,72 @@ class Visualizer
             mouse_press_world_ = mouse_world;
             mouse_press_px_ = input.mouse_px;
             mouse_action_ = MouseAction::pressed;
+            const auto shift = input.left_click.modifiers.shift;
+
             if (hovered_leg_.has_value())
             {
                 rotating_leg_ = hovered_leg_;
-                const auto* t = scene_.tensor_by_id(rotating_leg_->tensor);
-                if (t != nullptr)
+                if (not shift)
                 {
-                    rotating_initial_angle_
-                        = t->legs[static_cast<usize>(rotating_leg_->leg_index)].angle;
-                }
-                if (not input.left_click.modifiers.shift)
-                {
-                    selected_tensors_.clear();
+                    clear_selection();
                     selected_tensors_.push_back(rotating_leg_->tensor);
                 }
             }
             else if (hovered_tensor_.has_value())
             {
                 const auto id = *hovered_tensor_;
-                if (input.left_click.modifiers.shift)
+                const auto* t = find_tensor(live(), id);
+                const auto abs_id = (t != nullptr) ? t->abs_id : std::optional<u32>{};
+                if (abs_id.has_value())
                 {
-                    toggle_selected(id);
-                }
-                else if (not is_selected(id))
-                {
-                    selected_tensors_.clear();
-                    selected_tensors_.push_back(id);
-                }
-                drag_initial_positions_.clear();
-                drag_initial_positions_.reserve(selected_tensors_.size());
-                for (const auto sid : selected_tensors_)
-                {
-                    if (const auto* t = scene_.tensor_by_id(sid); t != nullptr)
+                    if (shift)
                     {
-                        drag_initial_positions_.push_back(t->position);
+                        toggle_abstraction(*abs_id);
+                        inner_sel_.reset();
+                    }
+                    else if (is_abs_selected(*abs_id))
+                    {
+                        inner_sel_ = id;
                     }
                     else
                     {
-                        drag_initial_positions_.push_back(Vec2{0.0f, 0.0f});
+                        clear_selection();
+                        selected_abstractions_.push_back(*abs_id);
                     }
                 }
+                else
+                {
+                    if (shift)
+                    {
+                        toggle_standalone(id);
+                    }
+                    else if (not is_standalone_selected(id))
+                    {
+                        clear_selection();
+                        selected_tensors_.push_back(id);
+                    }
+                }
+                seed_drag_positions();
+            }
+            else if (const auto hit_abs = hit_abstraction(mouse_world); hit_abs.has_value())
+            {
+                if (shift)
+                {
+                    toggle_abstraction(*hit_abs);
+                }
+                else if (not is_abs_selected(*hit_abs))
+                {
+                    clear_selection();
+                    selected_abstractions_.push_back(*hit_abs);
+                }
+                inner_sel_.reset();
+                seed_drag_positions();
             }
             else
             {
-                if (not input.left_click.modifiers.shift)
+                if (not shift)
                 {
-                    selected_tensors_.clear();
+                    clear_selection();
                 }
                 box_min_world_ = mouse_world;
                 box_max_world_ = mouse_world;
@@ -708,12 +914,13 @@ class Visualizer
             {
                 if (rotating_leg_.has_value())
                 {
+                    push_undo();
                     mouse_action_ = MouseAction::rotating_leg;
                 }
-                else if (hovered_tensor_.has_value()
-                         or (not selected_tensors_.empty()
-                             and (not drag_initial_positions_.empty())))
+                else if (hovered_tensor_.has_value() or hovered_abstraction_.has_value()
+                         or not drag_ids_.empty())
                 {
+                    push_undo();
                     mouse_action_ = MouseAction::dragging_tensors;
                 }
                 else
@@ -725,27 +932,31 @@ class Visualizer
 
         if (mouse_action_ == MouseAction::rotating_leg and rotating_leg_.has_value())
         {
-            auto* t = scene_.tensor_by_id(rotating_leg_->tensor);
+            auto* t = find_tensor(live(), rotating_leg_->tensor);
             if (t != nullptr)
             {
-                const auto v = mouse_world - t->position;
+                const Vec2 v{mouse_world.x - t->x, mouse_world.y - t->y};
                 if (length2(v) > 1.0f)
                 {
-                    t->legs[static_cast<usize>(rotating_leg_->leg_index)].angle
-                        = std::atan2(v.y, v.x);
+                    if (rotating_leg_->leg_index >= 0
+                        and static_cast<usize>(rotating_leg_->leg_index) < t->leg_angles.size())
+                    {
+                        t->leg_angles[static_cast<usize>(rotating_leg_->leg_index)]
+                            = std::atan2(v.y, v.x);
+                    }
                 }
             }
         }
         else if (mouse_action_ == MouseAction::dragging_tensors)
         {
             const auto world_delta = mouse_world - mouse_press_world_;
-            for (auto i = 0u; i < selected_tensors_.size() and i < drag_initial_positions_.size();
-                 ++i)
+            for (auto i = 0u; i < drag_ids_.size() and i < drag_initial_positions_.size(); ++i)
             {
-                auto* t = scene_.tensor_by_id(selected_tensors_[i]);
+                auto* t = find_tensor(live(), drag_ids_[i]);
                 if (t != nullptr)
                 {
-                    t->position = drag_initial_positions_[i] + world_delta;
+                    t->x = drag_initial_positions_[i].x + world_delta.x;
+                    t->y = drag_initial_positions_[i].y + world_delta.y;
                 }
             }
         }
@@ -777,14 +988,21 @@ class Visualizer
     {
         if (not additive)
         {
-            selected_tensors_.clear();
+            clear_selection();
         }
-        for (const auto& t : scene_.tensors)
+        for (const auto& t : live().tensors)
         {
-            if (t.position.x >= box_min_world_.x and t.position.x <= box_max_world_.x
-                and t.position.y >= box_min_world_.y and t.position.y <= box_max_world_.y)
+            // Tensors that live inside a container don't get picked up as
+            // standalone selections; selecting a container is done by clicking
+            // it explicitly.
+            if (t.abs_id.has_value())
             {
-                if (not is_selected(t.id))
+                continue;
+            }
+            if (t.x >= box_min_world_.x and t.x <= box_max_world_.x and t.y >= box_min_world_.y
+                and t.y <= box_max_world_.y)
+            {
+                if (not is_standalone_selected(t.id))
                 {
                     selected_tensors_.push_back(t.id);
                 }
@@ -809,35 +1027,549 @@ class Visualizer
                 open_radial(input.mouse_px);
             }
         }
+        if (input.key_left_pressed and current_frame_ > 0)
+        {
+            apply_frame(current_frame_ - 1);
+            set_status(
+                "frame " + std::to_string(current_frame_ + 1) + "/"
+                + std::to_string(frames_.size()) + ": " + live().name
+            );
+        }
+        if (input.key_right_pressed and current_frame_ + 1 < frames_.size())
+        {
+            apply_frame(current_frame_ + 1);
+            set_status(
+                "frame " + std::to_string(current_frame_ + 1) + "/"
+                + std::to_string(frames_.size()) + ": " + live().name
+            );
+        }
+        if (input.key_c_pressed and not radial_open_)
+        {
+            try_contract();
+        }
+        if (input.key_m_pressed)
+        {
+            if (input.shift_held)
+            {
+                merge_into_abstraction("MPS");
+            }
+            else
+            {
+                insert_template_mps(mouse_world);
+            }
+        }
+        if (input.key_o_pressed)
+        {
+            if (input.shift_held)
+            {
+                merge_into_abstraction("MPO");
+            }
+            else
+            {
+                insert_template_mpo(mouse_world);
+            }
+        }
+        if (input.key_p_pressed)
+        {
+            insert_template_peps(mouse_world);
+        }
         if (input.key_n_pressed and not radial_open_)
         {
-            const auto id = scene_.add_tensor(mouse_world, 3);
-            selected_tensors_ = {id};
+            insert_tensor(mouse_world);
         }
         if (input.key_delete_pressed)
         {
-            const auto copy = selected_tensors_;
-            for (const auto id : copy)
+            delete_selected();
+        }
+        if (input.key_z_pressed and (input.super_held or input.control_held))
+        {
+            if (input.shift_held)
             {
-                scene_.delete_tensor(id);
+                redo();
             }
-            selected_tensors_.clear();
+            else
+            {
+                undo();
+            }
         }
         if (input.key_plus_pressed and hovered_leg_.has_value())
         {
-            if (auto* t = scene_.tensor_by_id(hovered_leg_->tensor); t != nullptr)
-            {
-                t->legs[static_cast<usize>(hovered_leg_->leg_index)].prime_level += 1;
-            }
+            push_undo();
+            adjust_leg_prime(hovered_leg_->tensor, hovered_leg_->leg_index, +1);
         }
         if (input.key_minus_pressed and hovered_leg_.has_value())
         {
-            if (auto* t = scene_.tensor_by_id(hovered_leg_->tensor); t != nullptr)
+            push_undo();
+            adjust_leg_prime(hovered_leg_->tensor, hovered_leg_->leg_index, -1);
+        }
+    }
+
+    auto adjust_leg_prime(u32 tid, i32 leg_index, i32 delta) -> void
+    {
+        auto* t = find_tensor(live(), tid);
+        if (t == nullptr or leg_index < 0 or static_cast<usize>(leg_index) >= t->leg_prime.size())
+        {
+            return;
+        }
+        auto& v = t->leg_prime[static_cast<usize>(leg_index)];
+        v = std::max(0, v + delta);
+        if (static_cast<usize>(leg_index) < t->src_inds.size())
+        {
+            t->src_inds[static_cast<usize>(leg_index)].plev = v;
+        }
+    }
+
+    auto insert_tensor(Vec2 world_pos) -> void
+    {
+        push_undo();
+        auto& f = live();
+        Tensor t;
+        t.id = f.next_id++;
+        t.label = std::format("T{}", t.id);
+        t.x = world_pos.x;
+        t.y = world_pos.y;
+        t.rank = 3;
+        t.dims = {2, 2, 2};
+        t.leg_angles = viz::default_leg_angles(t.rank);
+        t.leg_prime.assign(static_cast<usize>(t.rank), 0);
+        t.leg_id.reserve(static_cast<usize>(t.rank));
+        for (i32 i = 0; i < t.rank; ++i)
+        {
+            t.leg_id.push_back(f.next_leg_id++);
+        }
+        t.color = viz::rank_color(t.rank);
+        t.src_inds.resize(static_cast<usize>(t.rank));
+        const auto id = t.id;
+        f.tensors.push_back(std::move(t));
+        selected_tensors_ = {id};
+        set_status("added tensor T" + std::to_string(id));
+    }
+
+    auto delete_selected() -> void
+    {
+        const auto ids = selection_tensor_set();
+        if (ids.empty())
+        {
+            return;
+        }
+        push_undo();
+        auto& f = live();
+        for (const auto id : ids)
+        {
+            std::erase_if(f.bonds, [id](const Bond& b) {
+                return b.a == id or b.b == id;
+            });
+            for (auto& a : f.abstractions)
             {
-                auto& level = t->legs[static_cast<usize>(hovered_leg_->leg_index)].prime_level;
-                level = std::max(0, level - 1);
+                std::erase(a.members, id);
+            }
+            std::erase_if(f.tensors, [id](const Tensor& t) { return t.id == id; });
+        }
+        std::erase_if(f.abstractions, [](const Abstraction& a) { return a.members.empty(); });
+        const auto n = ids.size();
+        clear_selection();
+        set_status("deleted " + std::to_string(n) + " tensor(s)");
+    }
+
+    // Undo/redo: snapshot the live frame before each mutation. Stack is bounded.
+    static constexpr usize k_undo_limit = 64;
+    std::vector<Frame> undo_stack_{};
+    std::vector<Frame> redo_stack_{};
+
+    auto push_undo() -> void
+    {
+        undo_stack_.push_back(live());
+        if (undo_stack_.size() > k_undo_limit)
+        {
+            undo_stack_.erase(undo_stack_.begin());
+        }
+        redo_stack_.clear();
+    }
+
+    auto undo() -> void
+    {
+        if (undo_stack_.empty())
+        {
+            set_status("nothing to undo");
+            return;
+        }
+        redo_stack_.push_back(live());
+        live() = std::move(undo_stack_.back());
+        undo_stack_.pop_back();
+        clear_selection();
+        set_status("undo");
+    }
+
+    auto redo() -> void
+    {
+        if (redo_stack_.empty())
+        {
+            set_status("nothing to redo");
+            return;
+        }
+        undo_stack_.push_back(live());
+        live() = std::move(redo_stack_.back());
+        redo_stack_.pop_back();
+        clear_selection();
+        set_status("redo");
+    }
+
+    struct MergeAnalysis
+    {
+        bool mps_ok{};
+        bool mpo_ok{};
+        std::vector<u32> order{};
+    };
+
+    [[nodiscard]] auto analyze_merge(const std::vector<u32>& ids) const -> MergeAnalysis
+    {
+        MergeAnalysis result;
+        if (ids.size() < 2)
+        {
+            return result;
+        }
+        const auto& f = live();
+        std::unordered_map<u32, std::vector<u32>> adj;
+        std::unordered_map<u32, i32> deg;
+        std::unordered_set<u32> inset(ids.begin(), ids.end());
+        for (const auto id : ids)
+        {
+            deg[id] = 0;
+            adj[id] = {};
+        }
+        for (const auto& b : f.bonds)
+        {
+            if (inset.contains(b.a) and inset.contains(b.b))
+            {
+                deg[b.a] += 1;
+                deg[b.b] += 1;
+                adj[b.a].push_back(b.b);
+                adj[b.b].push_back(b.a);
             }
         }
+        i32 ends = 0;
+        bool bad = false;
+        for (const auto id : ids)
+        {
+            const auto d = deg[id];
+            if (d == 1)
+            {
+                ++ends;
+            }
+            else if (d != 2)
+            {
+                bad = true;
+            }
+        }
+        std::unordered_set<u32> seen;
+        seen.insert(ids[0]);
+        std::vector<u32> stack{ids[0]};
+        while (not stack.empty())
+        {
+            const auto u = stack.back();
+            stack.pop_back();
+            for (const auto v : adj[u])
+            {
+                if (seen.insert(v).second)
+                {
+                    stack.push_back(v);
+                }
+            }
+        }
+        const bool is_chain = not bad and ends == 2 and seen.size() == ids.size();
+        result.mps_ok = is_chain;
+        result.mpo_ok = is_chain;
+        for (const auto id : ids)
+        {
+            const auto* t = find_tensor(live(), id);
+            if (t == nullptr)
+            {
+                result.mps_ok = false;
+                result.mpo_ok = false;
+                continue;
+            }
+            const auto free = t->rank - deg[id];
+            if (free != 1)
+            {
+                result.mps_ok = false;
+            }
+            if (free != 2)
+            {
+                result.mpo_ok = false;
+            }
+        }
+        if (is_chain)
+        {
+            u32 start = ids[0];
+            for (const auto id : ids)
+            {
+                if (deg[id] == 1)
+                {
+                    start = id;
+                    break;
+                }
+            }
+            std::unordered_set<u32> vis{start};
+            std::vector<u32> order{start};
+            auto cur = start;
+            while (order.size() < ids.size())
+            {
+                u32 next_id = 0;
+                bool found = false;
+                for (const auto v : adj[cur])
+                {
+                    if (not vis.contains(v))
+                    {
+                        next_id = v;
+                        found = true;
+                        break;
+                    }
+                }
+                if (not found)
+                {
+                    break;
+                }
+                vis.insert(next_id);
+                order.push_back(next_id);
+                cur = next_id;
+            }
+            if (order.size() == ids.size())
+            {
+                result.order = std::move(order);
+            }
+        }
+        return result;
+    }
+
+    auto merge_into_abstraction(std::string_view type_name) -> void
+    {
+        if (selected_tensors_.size() < 2)
+        {
+            set_status("select 2+ tensors forming a chain to merge");
+            return;
+        }
+        const auto info = analyze_merge(selected_tensors_);
+        const auto ok = (type_name == "MPS") ? info.mps_ok : info.mpo_ok;
+        if (not ok or info.order.empty())
+        {
+            set_status(
+                std::string{"selection is not a valid "} + std::string{type_name} + " chain"
+            );
+            return;
+        }
+        push_undo();
+        auto& f = live();
+        Abstraction abs;
+        abs.id = f.next_abs_id++;
+        abs.type_name = std::string{type_name};
+        abs.name = std::string{type_name} + std::to_string(abs.id);
+        abs.members = info.order;
+        const auto abs_id = abs.id;
+        for (const auto id : info.order)
+        {
+            if (auto* t = find_tensor(f, id); t != nullptr)
+            {
+                t->abs_id = abs_id;
+            }
+        }
+        f.abstractions.push_back(std::move(abs));
+        set_status("merged " + std::to_string(info.order.size()) + " tensors -> " + std::string{type_name});
+    }
+
+    auto insert_template_mps(Vec2 center) -> void
+    {
+        push_undo();
+        auto& f = live();
+        viz::IdCounters c{
+            .next_id = f.next_id,
+            .next_leg_id = f.next_leg_id,
+            .next_bond_id = f.next_bond_id,
+            .next_abs_id = f.next_abs_id,
+        };
+        auto out = viz::build_mps(c, 6, 4, 2, center);
+        absorb_template(out, c);
+        set_status("inserted MPS(6)");
+    }
+
+    auto insert_template_mpo(Vec2 center) -> void
+    {
+        push_undo();
+        auto& f = live();
+        viz::IdCounters c{
+            .next_id = f.next_id,
+            .next_leg_id = f.next_leg_id,
+            .next_bond_id = f.next_bond_id,
+            .next_abs_id = f.next_abs_id,
+        };
+        auto out = viz::build_mpo(c, 6, 3, 2, center);
+        absorb_template(out, c);
+        set_status("inserted MPO(6)");
+    }
+
+    auto insert_template_peps(Vec2 center) -> void
+    {
+        push_undo();
+        auto& f = live();
+        viz::IdCounters c{
+            .next_id = f.next_id,
+            .next_leg_id = f.next_leg_id,
+            .next_bond_id = f.next_bond_id,
+            .next_abs_id = f.next_abs_id,
+        };
+        auto out = viz::build_peps(c, 3, 3, 3, 2, center);
+        absorb_template(out, c);
+        set_status("inserted PEPS(3x3)");
+    }
+
+    auto absorb_template(viz::TemplateOutput& out, viz::IdCounters c) -> void
+    {
+        auto& f = live();
+        for (auto& t : out.tensors)
+        {
+            f.tensors.push_back(std::move(t));
+        }
+        for (auto& b : out.bonds)
+        {
+            f.bonds.push_back(std::move(b));
+        }
+        f.abstractions.push_back(std::move(out.abstraction));
+        f.next_id = c.next_id;
+        f.next_leg_id = c.next_leg_id;
+        f.next_bond_id = c.next_bond_id;
+        f.next_abs_id = c.next_abs_id;
+    }
+
+    auto try_contract() -> void
+    {
+        if (not julia_.has_value())
+        {
+            set_status("Julia client disabled (use without --no-julia)");
+            return;
+        }
+        if (selected_abstractions_.size() != 2)
+        {
+            set_status(
+                "select two abstractions to contract (got "
+                + std::to_string(selected_abstractions_.size()) + ")"
+            );
+            return;
+        }
+        const Abstraction* left = nullptr;
+        const Abstraction* right = nullptr;
+        for (const auto& a : live().abstractions)
+        {
+            if (a.id == selected_abstractions_[0])
+            {
+                left = &a;
+            }
+            else if (a.id == selected_abstractions_[1])
+            {
+                right = &a;
+            }
+        }
+        if (left == nullptr or right == nullptr)
+        {
+            set_status("abstraction lookup failed");
+            return;
+        }
+        const Vec2 stage_center{scene_center().x, scene_center().y};
+        auto result = julia_->contract(*left, *right, live().tensors, "lr", stage_center);
+        if (not result.ok)
+        {
+            set_status("contract failed: " + result.error, 10.0f);
+            return;
+        }
+        push_undo();
+        merge_frame_into_live(result.frame, left->name + " x " + right->name);
+        set_status("contracted " + left->name + " x " + right->name);
+    }
+
+    auto merge_frame_into_live(Frame& incoming, std::string new_name) -> void
+    {
+        auto& f = live();
+        const auto tid_off = f.next_id - 1;
+        const auto leg_off = f.next_leg_id - 1;
+        const auto bid_off = f.next_bond_id - 1;
+        const auto aid_off = f.next_abs_id - 1;
+
+        // Shift incoming ids
+        std::map<u32, u32> id_map;
+        for (auto& t : incoming.tensors)
+        {
+            const auto new_id = t.id + tid_off;
+            id_map[t.id] = new_id;
+            t.id = new_id;
+            for (auto& l : t.leg_id)
+            {
+                l += leg_off;
+            }
+            if (t.abs_id.has_value())
+            {
+                t.abs_id = *t.abs_id + aid_off;
+            }
+        }
+        for (auto& b : incoming.bonds)
+        {
+            b.id += bid_off;
+            b.a = id_map[b.a];
+            b.b = id_map[b.b];
+        }
+        for (auto& a : incoming.abstractions)
+        {
+            a.id += aid_off;
+            for (auto& m : a.members)
+            {
+                m = id_map[m];
+            }
+        }
+        if (not incoming.abstractions.empty())
+        {
+            incoming.abstractions.front().name = std::move(new_name);
+        }
+        // Position below the operands
+        f32 sum_y = 0.0f;
+        usize count = 0;
+        for (const auto& t : f.tensors)
+        {
+            sum_y += t.y;
+            ++count;
+        }
+        const auto target_y = (count > 0) ? sum_y / static_cast<f32>(count) + 260.0f : 0.0f;
+        f32 in_sum_x = 0.0f;
+        f32 in_sum_y = 0.0f;
+        for (const auto& t : incoming.tensors)
+        {
+            in_sum_x += t.x;
+            in_sum_y += t.y;
+        }
+        const auto in_count = static_cast<f32>(incoming.tensors.size());
+        if (in_count > 0.0f)
+        {
+            const auto dx = -in_sum_x / in_count;
+            const auto dy = target_y - in_sum_y / in_count;
+            for (auto& t : incoming.tensors)
+            {
+                t.x += dx;
+                t.y += dy;
+            }
+        }
+
+        for (auto& t : incoming.tensors)
+        {
+            f.tensors.push_back(std::move(t));
+        }
+        for (auto& b : incoming.bonds)
+        {
+            f.bonds.push_back(std::move(b));
+        }
+        for (auto& a : incoming.abstractions)
+        {
+            f.abstractions.push_back(std::move(a));
+        }
+        f.next_id += incoming.next_id;
+        f.next_leg_id += incoming.next_leg_id;
+        f.next_bond_id += incoming.next_bond_id;
+        f.next_abs_id += incoming.next_abs_id;
     }
 
     // ------------------------------------------------------------------
@@ -870,7 +1602,19 @@ class Visualizer
         if (commit and radial_hovered_ >= 0)
         {
             const auto items = radial_items();
-            radial_last_action_ = items[static_cast<usize>(radial_hovered_)].label;
+            const auto label = items[static_cast<usize>(radial_hovered_)].label;
+            if (label == "contract")
+            {
+                try_contract();
+            }
+            else if (label == "delete")
+            {
+                delete_selected();
+            }
+            else
+            {
+                set_status("menu action: " + label + " (not wired yet)");
+            }
         }
         radial_open_ = false;
         radial_hovered_ = -1;
@@ -892,38 +1636,34 @@ class Visualizer
         {
             angle += two_pi;
         }
-        const auto sector = static_cast<i32>(
-            angle * static_cast<f32>(k_radial_outer_count) / two_pi
-        );
+        const auto sector
+            = static_cast<i32>(angle * static_cast<f32>(k_radial_outer_count) / two_pi);
         return std::clamp(sector, 0, k_radial_outer_count - 1);
     }
 
     // ------------------------------------------------------------------
-    // Bond layout (multi-lane)
+    // Bond layout
     // ------------------------------------------------------------------
-
-    struct LaneKey
-    {
-        u32 lo{};
-        u32 hi{};
-        bool operator<(const LaneKey& other) const noexcept
-        {
-            return std::tie(lo, hi) < std::tie(other.lo, other.hi);
-        }
-    };
 
     [[nodiscard]] auto compute_bond_lanes() const -> std::map<u32, std::pair<i32, i32>>
     {
-        // Map bond id -> (lane_index, total_lanes)
-        std::map<LaneKey, std::vector<u32>> groups;
-        for (const auto& b : scene_.bonds)
+        struct LaneKey
         {
-            const auto lo = std::min(b.tensor_a, b.tensor_b);
-            const auto hi = std::max(b.tensor_a, b.tensor_b);
+            u32 lo, hi;
+            bool operator<(const LaneKey& o) const noexcept
+            {
+                return std::tie(lo, hi) < std::tie(o.lo, o.hi);
+            }
+        };
+        std::map<LaneKey, std::vector<u32>> groups;
+        for (const auto& b : live().bonds)
+        {
+            const auto lo = std::min(b.a, b.b);
+            const auto hi = std::max(b.a, b.b);
             groups[LaneKey{lo, hi}].push_back(b.id);
         }
         std::map<u32, std::pair<i32, i32>> result;
-        for (const auto& [key, ids] : groups)
+        for (const auto& [_, ids] : groups)
         {
             for (auto i = 0u; i < ids.size(); ++i)
             {
@@ -942,12 +1682,9 @@ class Visualizer
         const auto pivot = runtime_->camera_2d_pivot();
         const auto zoom = runtime_->camera_2d_zoom();
         const auto logical = runtime_->logical_extent();
-        const auto w = logical.x;
-        const auto h = logical.y;
-        const auto half_w = 0.5f * w * zoom;
-        const auto half_h = 0.5f * h * zoom;
+        const auto half_w = 0.5f * logical.x * zoom;
+        const auto half_h = 0.5f * logical.y * zoom;
 
-        // Adapt spacing based on zoom so we don't draw a million dots when zoomed out
         auto spacing = k_grid_spacing;
         while (spacing / zoom < 18.0f)
         {
@@ -977,25 +1714,25 @@ class Visualizer
 
     auto draw_abstractions(FrameContext& frame) -> void
     {
-        for (const auto& a : scene_.abstractions)
+        for (const auto& a : live().abstractions)
         {
-            if (a.tensor_ids.empty())
+            if (a.members.empty())
             {
                 continue;
             }
             std::optional<Vec2> mn;
             std::optional<Vec2> mx;
             f32 max_radius = 0.0f;
-            for (const auto id : a.tensor_ids)
+            for (const auto id : a.members)
             {
-                const auto* t = scene_.tensor_by_id(id);
+                const auto* t = find_tensor(live(), id);
                 if (t == nullptr)
                 {
                     continue;
                 }
                 const auto r = node_radius(t->rank);
                 max_radius = std::max(max_radius, r);
-                const auto p = t->position;
+                const Vec2 p{t->x, t->y};
                 if (not mn.has_value())
                 {
                     mn = p;
@@ -1011,23 +1748,41 @@ class Visualizer
             {
                 continue;
             }
-            const auto pad = max_radius + 38.0f;
+            const auto pad = max_radius + 40.0f;
             const auto top_left = Vec2{mn->x - pad, mn->y - pad};
             const auto size = Vec2{(mx->x - mn->x) + 2.0f * pad, (mx->y - mn->y) + 2.0f * pad};
+            const auto selected = is_abs_selected(a.id);
+            const auto hovered
+                = hovered_abstraction_.has_value() and *hovered_abstraction_ == a.id;
+            Color fill{0.42f, 0.58f, 0.82f, 0.05f};
+            Color stroke{0.58f, 0.74f, 0.96f, 0.55f};
+            f32 stroke_w = 1.6f;
+            if (selected)
+            {
+                fill = Color{0.46f, 0.66f, 0.95f, 0.15f};
+                stroke = Color{1.0f, 1.0f, 1.0f, 0.95f};
+                stroke_w = 2.6f;
+            }
+            else if (hovered)
+            {
+                fill = Color{0.46f, 0.66f, 0.95f, 0.08f};
+                stroke = Color{0.85f, 0.92f, 1.0f, 0.80f};
+                stroke_w = 2.0f;
+            }
             frame.draw.rect(
                 {
                     .position = top_left,
                     .size = size,
-                    .fill_color = Color{0.42f, 0.58f, 0.82f, 0.05f},
-                    .stroke_color = Color{0.58f, 0.74f, 0.96f, 0.55f},
-                    .stroke_width = 1.6f,
+                    .fill_color = fill,
+                    .stroke_color = stroke,
+                    .stroke_width = stroke_w,
                     .corner_radius = 28.0f,
                 }
             );
             frame.draw.text(
                 {
                     .position = Vec2{top_left.x + 16.0f, top_left.y + 24.0f},
-                    .text = std::format("{} ({})", a.type_name, a.tensor_ids.size()),
+                    .text = a.name + " (" + std::to_string(a.members.size()) + ")" + a.env_suffix,
                     .color = Color{0.84f, 0.92f, 1.0f, 0.92f},
                     .size_scale = 0.55f,
                 }
@@ -1038,42 +1793,52 @@ class Visualizer
     auto draw_bonds(FrameContext& frame) -> void
     {
         const auto lanes = compute_bond_lanes();
-        for (const auto& bond : scene_.bonds)
+        for (const auto& bond : live().bonds)
         {
-            const auto* a = scene_.tensor_by_id(bond.tensor_a);
-            const auto* b = scene_.tensor_by_id(bond.tensor_b);
+            const auto* a = find_tensor(live(), bond.a);
+            const auto* b = find_tensor(live(), bond.b);
             if (a == nullptr or b == nullptr)
             {
                 continue;
             }
-            const auto from = a->position;
-            const auto to = b->position;
+            const Vec2 from{a->x, a->y};
+            const Vec2 to{b->x, b->y};
             const auto along = to - from;
-            const auto mid = Vec2{(from.x + to.x) * 0.5f, (from.y + to.y) * 0.5f};
+            const Vec2 mid{0.5f * (from.x + to.x), 0.5f * (from.y + to.y)};
             const auto along_norm = normalize_or(along, Vec2{1.0f, 0.0f});
             const auto perp_norm = perp(along_norm);
 
             const auto it = lanes.find(bond.id);
             const auto [lane_index, total]
                 = (it != lanes.end()) ? it->second : std::pair<i32, i32>{0, 1};
-            const auto offset = lane_offset(lane_index, total);
-            // Curve bulge: even for lane 0 of a single bond, no bulge. Otherwise the
-            // bulge is the lane offset itself, producing parallel arcs.
-            const auto bulge_amount = (total <= 1) ? 0.0f : offset;
-            const auto control = Vec2{
+            const auto half = static_cast<f32>(total - 1) * 0.5f;
+            const auto bulge_amount
+                = (total <= 1) ? 0.0f : k_bond_lane_offset * (static_cast<f32>(lane_index) - half);
+            const Vec2 control{
                 mid.x + perp_norm.x * bulge_amount,
                 mid.y + perp_norm.y * bulge_amount,
             };
 
-            const auto tag = bond.tags.empty() ? std::string{} : bond.tags.front();
-            const auto base_color = tag_color(tag);
-            const auto dashed = (bond.prime_level > 0);
+            // Tags and prime come from the (a, ai) leg of the source tensor;
+            // all tag strings on that leg show in the bond label, prime ticks
+            // append to the last line (matching the HTML behaviour).
+            std::vector<std::string> bond_tags;
+            i32 prime_level = 0;
+            if (bond.ai >= 0 and static_cast<usize>(bond.ai) < a->src_inds.size())
+            {
+                const auto& s = a->src_inds[static_cast<usize>(bond.ai)];
+                bond_tags = s.tags;
+                prime_level = s.plev;
+            }
+            const auto primary_tag = bond_tags.empty() ? std::string{} : bond_tags.front();
+            const auto color = viz::tag_color(primary_tag);
+            const auto dashed = (prime_level > 0);
             frame.draw.bezier(
                 {
                     .start = from,
                     .control = control,
                     .end = to,
-                    .color = base_color,
+                    .color = color,
                     .thickness = k_bond_thickness,
                     .dash_on = dashed ? 9.0f : 0.0f,
                     .dash_off = dashed ? 6.0f : 0.0f,
@@ -1081,78 +1846,81 @@ class Visualizer
                 }
             );
 
-            // Bond label at quarter-curve point so multi-lane labels don't overlap badly
-            if (not bond.tags.empty() or bond.prime_level > 0)
+            if (not bond_tags.empty() or prime_level > 0)
             {
                 const auto t_label = (lane_index % 2 == 0) ? 0.35f : 0.65f;
                 const auto label_pos = quad_bezier(from, control, to, t_label);
-                draw_bond_label(frame, label_pos, bond, base_color);
+                draw_bond_label(frame, label_pos, bond_tags, prime_level, color);
             }
         }
     }
 
     auto draw_bond_label(
-        FrameContext& frame, Vec2 world_pos, const Bond& bond, Color base_color
+        FrameContext& frame,
+        Vec2 world_pos,
+        const std::vector<std::string>& tags,
+        i32 prime,
+        Color base
     ) -> void
     {
-        std::vector<std::string> lines;
-        for (const auto& t : bond.tags)
-        {
-            lines.push_back(t);
-        }
-        if (bond.prime_level > 0)
+        std::vector<std::string> lines = tags;
+        if (prime > 0)
         {
             std::string ticks;
-            if (bond.prime_level <= 3)
+            if (prime <= 3)
             {
-                ticks.assign(static_cast<usize>(bond.prime_level), '\'');
+                ticks.assign(static_cast<usize>(prime), '\'');
             }
             else
             {
-                ticks = std::format("{}'", bond.prime_level);
+                ticks = std::to_string(prime) + "'";
             }
-            lines.push_back(ticks);
+            if (lines.empty())
+            {
+                lines.push_back(ticks);
+            }
+            else
+            {
+                lines.back() += ticks;
+            }
         }
         if (lines.empty())
         {
             return;
         }
-        // Approximate label width: longest line * font width
-        const auto approx_glyph_width = 8.5f;
+        const auto glyph_w = 7.0f;
         f32 longest = 0.0f;
         for (const auto& line : lines)
         {
-            longest = std::max(longest, static_cast<f32>(line.size()) * approx_glyph_width);
+            longest = std::max(longest, static_cast<f32>(line.size()) * glyph_w);
         }
-        const auto pad_x = 6.0f;
-        const auto pad_y = 4.0f;
-        const auto line_height = 14.0f;
-        const auto width = longest + 2.0f * pad_x;
-        const auto height = line_height * static_cast<f32>(lines.size()) + 2.0f * pad_y;
-        const auto top_left = Vec2{world_pos.x - width * 0.5f, world_pos.y - height * 0.5f};
-
+        const auto pad_x = 5.0f;
+        const auto pad_y = 3.0f;
+        const auto line_h = 12.0f;
+        const auto w = longest + 2.0f * pad_x;
+        const auto h = line_h * static_cast<f32>(lines.size()) + 2.0f * pad_y;
+        const auto top_left = Vec2{world_pos.x - w * 0.5f, world_pos.y - h * 0.5f};
         frame.draw.rect(
             {
                 .position = top_left,
-                .size = Vec2{width, height},
+                .size = Vec2{w, h},
                 .fill_color = Color{0.06f, 0.10f, 0.14f, 0.86f},
-                .stroke_color = with_alpha(base_color, 0.6f),
+                .stroke_color = with_alpha(base, 0.65f),
                 .stroke_width = 1.0f,
-                .corner_radius = 6.0f,
+                .corner_radius = 5.0f,
             }
         );
-
-        for (auto i = 0u; i < lines.size(); ++i)
+        for (usize i = 0; i < lines.size(); ++i)
         {
             frame.draw.text(
                 {
                     .position = Vec2{
                         top_left.x + pad_x,
-                        top_left.y + pad_y + line_height * (static_cast<f32>(i) + 0.7f),
+                        top_left.y + pad_y + line_h * (static_cast<f32>(i) + 0.7f),
                     },
                     .text = lines[i],
-                    .color = with_alpha(base_color, 0.95f),
-                    .size_scale = 0.45f,
+                    .color = with_alpha(base, 0.95f),
+                    .size_scale = 0.42f,
                 }
             );
         }
@@ -1160,24 +1928,39 @@ class Visualizer
 
     auto draw_free_legs(FrameContext& frame) -> void
     {
-        for (const auto& t : scene_.tensors)
+        const auto& f = live();
+        for (const auto& t : f.tensors)
         {
             for (i32 leg_i = 0; leg_i < t.rank; ++leg_i)
             {
-                if (scene_.is_leg_bonded(t.id, leg_i))
+                if (is_leg_bonded(f, t.id, leg_i))
                 {
                     continue;
                 }
-                const auto& info = t.legs[static_cast<usize>(leg_i)];
-                const auto tag = info.tags.empty() ? std::string{} : info.tags.front();
-                const auto color = tag_color(tag);
-                const auto anchor = leg_anchor(scene_, t, leg_i);
-                const auto tip = leg_tip(scene_, t, leg_i);
-                const auto dashed = (info.prime_level > 0);
+                std::string primary_tag;
+                i32 prime = 0;
+                std::vector<std::string> tag_list;
+                if (static_cast<usize>(leg_i) < t.src_inds.size())
+                {
+                    const auto& s = t.src_inds[static_cast<usize>(leg_i)];
+                    tag_list = s.tags;
+                    prime = s.plev;
+                    if (not s.tags.empty())
+                    {
+                        primary_tag = s.tags.front();
+                    }
+                }
+                const auto color = viz::tag_color(primary_tag);
+                const auto anchor = leg_anchor(f, t, leg_i);
+                const auto tip = Vec2{
+                    anchor.point.x + anchor.normal.x * k_leg_length,
+                    anchor.point.y + anchor.normal.y * k_leg_length,
+                };
+                const auto dashed = (prime > 0);
 
                 frame.draw.line_2d(
                     {
-                        .start = anchor,
+                        .start = anchor.point,
                         .end = tip,
                         .color = color,
                         .thickness = k_leg_thickness,
@@ -1209,53 +1992,88 @@ class Visualizer
                     }
                 );
 
-                draw_leg_label(frame, t, leg_i, tip, color, info);
+                draw_leg_label(frame, anchor.normal, tip, color, tag_list, prime);
             }
         }
     }
 
     auto draw_leg_label(
         FrameContext& frame,
-        const Tensor& t,
-        i32 leg_i,
+        Vec2 normal,
         Vec2 tip,
         Color color,
-        const LegInfo& info
+        const std::vector<std::string>& tags,
+        i32 prime
     ) -> void
     {
-        std::vector<std::string> lines;
-        for (const auto& tag : info.tags)
-        {
-            lines.push_back(tag);
-        }
-        if (info.prime_level > 0)
+        std::vector<std::string> lines = tags;
+        if (prime > 0)
         {
             std::string ticks;
-            if (info.prime_level <= 3)
+            if (prime <= 3)
             {
-                ticks.assign(static_cast<usize>(info.prime_level), '\'');
+                ticks.assign(static_cast<usize>(prime), '\'');
             }
             else
             {
-                ticks = std::format("{}'", info.prime_level);
+                ticks = std::to_string(prime) + "'";
             }
-            lines.push_back(ticks);
+            if (lines.empty())
+            {
+                lines.push_back(ticks);
+            }
+            else
+            {
+                lines.back() += ticks;
+            }
         }
         if (lines.empty())
         {
             return;
         }
-        const auto dir = leg_direction(scene_, t, leg_i);
-        const auto offset = Vec2{dir.x * 14.0f, dir.y * 14.0f};
-        const auto line_height = 13.0f;
-        for (auto i = 0u; i < lines.size(); ++i)
+        // Place the label off the tip along the normal; stack direction depends
+        // on which way the leg points (matches drawFreeLegs in the HTML).
+        const auto base_x = tip.x + normal.x * 7.0f;
+        const auto base_y = tip.y + normal.y * 7.0f;
+        constexpr f32 glyph_w = 7.0f;
+        constexpr f32 line_h = 11.0f;
+        f32 max_w = 0.0f;
+        for (const auto& line : lines)
         {
-            const auto y_offset = static_cast<f32>(i) * line_height;
-            // Position labels outward from the tip, along the leg direction
-            const auto pos = Vec2{
-                tip.x + offset.x - 12.0f,
-                tip.y + offset.y + 4.0f + y_offset,
-            };
+            max_w = std::max(max_w, static_cast<f32>(line.size()) * glyph_w);
+        }
+        const auto stack_count = static_cast<f32>(lines.size());
+        for (usize i = 0; i < lines.size(); ++i)
+        {
+            const auto line_w = static_cast<f32>(lines[i].size()) * glyph_w;
+            f32 x = base_x;
+            f32 y = base_y;
+            if (normal.y < -0.5f)
+            {
+                // pointing up: stack lines upward (last line nearest the tip)
+                x -= line_w * 0.5f;
+                y -= (stack_count - 1.0f - static_cast<f32>(i)) * line_h;
+            }
+            else if (normal.y > 0.5f)
+            {
+                // pointing down: stack lines downward
+                x -= line_w * 0.5f;
+                y += static_cast<f32>(i) * line_h + 8.0f;
+            }
+            else
+            {
+                // horizontal: align based on normal.x sign
+                if (normal.x > 0.0f)
+                {
+                    // right-pointing leg
+                }
+                else
+                {
+                    x -= max_w;
+                }
+                y += (static_cast<f32>(i) - (stack_count - 1.0f) * 0.5f) * line_h + 4.0f;
+            }
+            const Vec2 pos{x, y};
             frame.draw.text(
                 {
                     .position = pos,
@@ -1269,7 +2087,7 @@ class Visualizer
 
     auto draw_tensors(FrameContext& frame) -> void
     {
-        for (const auto& t : scene_.tensors)
+        for (const auto& t : live().tensors)
         {
             const auto r = node_radius(t.rank);
             const auto selected = is_selected(t.id);
@@ -1279,7 +2097,7 @@ class Visualizer
             {
                 frame.draw.rect(
                     {
-                        .position = Vec2{t.position.x - r - 4.0f, t.position.y - r - 4.0f},
+                        .position = Vec2{t.x - r - 4.0f, t.y - r - 4.0f},
                         .size = Vec2{(r + 4.0f) * 2.0f, (r + 4.0f) * 2.0f},
                         .fill_color = Color{1.0f, 1.0f, 1.0f, 0.10f},
                         .stroke_color = Color{0.0f, 0.0f, 0.0f, 0.0f},
@@ -1304,19 +2122,19 @@ class Visualizer
 
             frame.draw.rect(
                 {
-                    .position = Vec2{t.position.x - r, t.position.y - r},
+                    .position = Vec2{t.x - r, t.y - r},
                     .size = Vec2{2.0f * r, 2.0f * r},
                     .fill_color = t.color,
                     .stroke_color = stroke,
                     .stroke_width = stroke_w,
-                    .bevel_size = r * k_node_bevel_ratio,
+                    .corner_radius = std::max(4.0f, r * k_node_bevel_ratio),
                 }
             );
 
             const auto label_width_approx = static_cast<f32>(t.label.size()) * 8.0f;
             frame.draw.text(
                 {
-                    .position = Vec2{t.position.x - label_width_approx * 0.5f, t.position.y + 5.0f},
+                    .position = Vec2{t.x - label_width_approx * 0.5f, t.y + 5.0f},
                     .text = t.label,
                     .color = Color{1.0f, 1.0f, 1.0f, 1.0f},
                     .size_scale = 0.55f,
@@ -1355,7 +2173,8 @@ class Visualizer
         for (i32 i = 0; i < k_radial_outer_count; ++i)
         {
             const auto a0 = two_pi * static_cast<f32>(i) / static_cast<f32>(k_radial_outer_count);
-            const auto a1 = two_pi * static_cast<f32>(i + 1) / static_cast<f32>(k_radial_outer_count);
+            const auto a1
+                = two_pi * static_cast<f32>(i + 1) / static_cast<f32>(k_radial_outer_count);
             const auto a_mid = 0.5f * (a0 + a1);
             const auto is_hover = (radial_hovered_ == i);
             const Color base{0.20f, 0.28f, 0.40f, 0.90f};
@@ -1374,7 +2193,7 @@ class Visualizer
                 }
             );
             const auto label_radius = 0.5f * (k_radial_inner_radius + k_radial_outer_radius);
-            const auto label_pos = Vec2{
+            const Vec2 label_pos{
                 radial_center_px_.x + std::cos(a_mid) * label_radius - 22.0f,
                 radial_center_px_.y + std::sin(a_mid) * label_radius + 4.0f,
             };
@@ -1411,32 +2230,54 @@ class Visualizer
     {
         frame.draw.text_screen(
             {
-                .position = Vec2{24.0f, 36.0f},
+                .position = Vec2{24.0f, 30.0f},
                 .text = "dans_vk tensor network visualiser",
                 .color = Color::white,
             }
         );
 
-        const auto info = std::format(
-            "tensors: {}  bonds: {}  selected: {}  zoom: {:.2f}  world: ({:.0f}, {:.0f})",
-            scene_.tensors.size(),
-            scene_.bonds.size(),
-            selected_tensors_.size(),
-            static_cast<f64>(runtime_->camera_2d_zoom()),
-            static_cast<f64>(mouse_world.x),
-            static_cast<f64>(mouse_world.y)
+        const auto& f = live();
+        const auto frame_info = std::format(
+            "frame {}/{}  {}  ({} tensors, {} bonds, {} abs)",
+            current_frame_ + 1,
+            frames_.size(),
+            f.name.empty() ? "(unnamed)" : f.name,
+            f.tensors.size(),
+            f.bonds.size(),
+            f.abstractions.size()
         );
         frame.draw.text_screen(
             {
-                .position = Vec2{24.0f, 70.0f},
+                .position = Vec2{24.0f, 56.0f},
+                .text = frame_info,
+                .color = Color{0.78f, 0.86f, 0.98f, 1.0f},
+                .size_scale = 0.62f,
+            }
+        );
+
+        const auto julia_str = julia_.has_value()
+                                   ? (julia_available_ ? "Julia: connected" : "Julia: offline")
+                                   : "Julia: disabled";
+        const auto info = std::format(
+            "selected: {}  hovered: {}  zoom: {:.2f}  world: ({:.0f}, {:.0f})  {}",
+            selected_tensors_.size(),
+            hovered_tensor_.has_value() ? std::to_string(*hovered_tensor_) : std::string{"-"},
+            static_cast<f64>(runtime_->camera_2d_zoom()),
+            static_cast<f64>(mouse_world.x),
+            static_cast<f64>(mouse_world.y),
+            julia_str
+        );
+        frame.draw.text_screen(
+            {
+                .position = Vec2{24.0f, 80.0f},
                 .text = info,
                 .color = Color{0.80f, 0.88f, 0.98f, 1.0f},
-                .size_scale = 0.62f,
+                .size_scale = 0.55f,
             }
         );
         frame.draw.text_screen(
             {
-                .position = Vec2{24.0f, 96.0f},
+                .position = Vec2{24.0f, 104.0f},
                 .text = "LMB select/drag  shift+LMB multi  drag leg tip rotates  RMB/MMB pan  wheel zoom",
                 .color = Color{0.62f, 0.74f, 0.90f, 1.0f},
                 .size_scale = 0.50f,
@@ -1444,18 +2285,18 @@ class Visualizer
         );
         frame.draw.text_screen(
             {
-                .position = Vec2{24.0f, 118.0f},
-                .text = "N add tensor  Del/Backspace delete selected  + / - prime/unprime hovered leg  Space radial menu",
+                .position = Vec2{24.0f, 124.0f},
+                .text = "M/O/P MPS/MPO/PEPS  N tensor  Del delete  +/- prime  C contract  arrows prev/next frame",
                 .color = Color{0.62f, 0.74f, 0.90f, 1.0f},
                 .size_scale = 0.50f,
             }
         );
-        if (not radial_last_action_.empty())
+        if (not status_message_.empty() and elapsed_ < status_until_)
         {
             frame.draw.text_screen(
                 {
-                    .position = Vec2{24.0f, 144.0f},
-                    .text = std::format("last menu action: {}", radial_last_action_),
+                    .position = Vec2{24.0f, 150.0f},
+                    .text = status_message_,
                     .color = Color{0.98f, 0.86f, 0.66f, 1.0f},
                     .size_scale = 0.55f,
                 }
@@ -1477,8 +2318,10 @@ class Visualizer
 
 auto print_usage(const char* executable) -> void
 {
-    std::cout << "usage: " << executable
-              << " [--smoke-frames N] [--screenshot PATH] [--hide-ui]\n";
+    std::cout
+        << "usage: " << executable
+        << " [--load PATH] [--no-julia] [--jl-host HOST] [--jl-port PORT] [--smoke-frames N]"
+           " [--screenshot PATH] [--hide-ui]\n";
 }
 
 }  // namespace
@@ -1491,6 +2334,7 @@ auto main(int argc, char** argv) -> int
             .window_title = "dans_vk tensor network visualiser",
             .render_mode = dans::vk::RenderMode::two_d,
         };
+        AppArgs app_args;
         for (auto i = 1; i < argc; ++i)
         {
             const std::string_view arg{argv[i]};
@@ -1511,6 +2355,23 @@ auto main(int argc, char** argv) -> int
             {
                 config.hide_ui = true;
             }
+            else if (arg == "--load" and i + 1 < argc)
+            {
+                app_args.load_path = argv[++i];
+                app_args.seed_demo = false;
+            }
+            else if (arg == "--no-julia")
+            {
+                app_args.no_julia = true;
+            }
+            else if (arg == "--jl-host" and i + 1 < argc)
+            {
+                app_args.julia.host = argv[++i];
+            }
+            else if (arg == "--jl-port" and i + 1 < argc)
+            {
+                app_args.julia.port = static_cast<int>(parse_u32(argv[++i], 8754u));
+            }
             else
             {
                 std::cerr << "unknown or incomplete argument: " << arg << '\n';
@@ -1519,7 +2380,7 @@ auto main(int argc, char** argv) -> int
             }
         }
 
-        Visualizer app{};
+        Visualizer app{std::move(app_args)};
         dans::vk::Runtime runtime{std::move(config)};
         return runtime.run_prototype(app);
     }

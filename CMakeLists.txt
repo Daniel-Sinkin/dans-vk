@@ -246,6 +246,11 @@ if(DANS_VK_BUILD_RUNTIME AND Vulkan_FOUND)
 
     add_executable(dans_vk_2d_app app/main_2d.cpp)
     target_link_libraries(dans_vk_2d_app PRIVATE dans_vk dans_vk_warnings)
+    target_include_directories(dans_vk_2d_app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_include_directories(dans_vk_2d_app SYSTEM PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/external
+      ${CMAKE_CURRENT_SOURCE_DIR}/app/viz/external
+    )
     target_compile_definitions(dans_vk_2d_app PRIVATE
       DANS_VK_DEFAULT_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/external/fonts/Inter-Regular.ttf"
     )

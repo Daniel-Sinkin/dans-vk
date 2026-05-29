@@ -23,6 +23,7 @@ vendored. They are toolchain/system dependencies.
 | nlohmann/json | 'external/nlohmann' | 'nlohmann/json' tag 'v3.11.3', commit '9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03' | MIT, see 'external/nlohmann/LICENSE.MIT' |
 | stb | 'external/stb' | 'nothings/stb' 'master' commit '31c1ad37456438565541f4919958214b6e762fb4' | Public domain or MIT, see license text at the bottom of each vendored header |
 | Inter font | 'external/fonts' | 'rsms/inter' tag 'v4.1', commit 'e3a3d4c57d5ecc01453a575621882a384c1995a3' | SIL Open Font License 1.1, see 'external/fonts/LICENSE.txt' |
+| cpp-httplib | 'app/viz/external' | 'yhirose/cpp-httplib' tag 'v0.18.0' | MIT, see 'app/viz/external/httplib_LICENSE.txt'. Used by the visualiser app, not by the dans-vk library. |
 
 ## Shortened Copies
 

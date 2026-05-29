@@ -46,6 +46,14 @@ with later additions and cleanup in 'dans-vk'.
     'stb_truetype.h' v1.26
   - Vendored form: shortened to the single-header libraries used by 'dans-vk';
     the rest of the stb repository is not included.
+- cpp-httplib: 'https://github.com/yhirose/cpp-httplib'
+  - Tag: 'v0.18.0'
+  - Vendored file: 'app/viz/external/httplib.h' plus the MIT license as
+    'app/viz/external/httplib_LICENSE.txt'.
+  - Vendored form: single header, used by the tensor network visualiser app
+    (app/main_2d.cpp) for HTTP POSTs to the Julia /contract server. Not part
+    of the dans-vk library; lives under app/ so it travels with the
+    visualiser when it is ported into its own repo.
 - Inter font family: 'https://github.com/rsms/inter'
   - Tag: 'v4.1'
   - Commit: 'e3a3d4c57d5ecc01453a575621882a384c1995a3'

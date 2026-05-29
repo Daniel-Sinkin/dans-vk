@@ -1198,6 +1198,8 @@ struct Runtime::Impl
     bool done{};
     bool orbiting{};
     bool panning{};
+    bool rmb_pending_click{};
+    Vec2 rmb_press_px{};
     bool main_pass_active{};
     bool imgui_rendered{};
 
@@ -4773,69 +4775,95 @@ auto Runtime::Impl::draw_runtime_ui() -> void
 {
     ImGui::SetNextWindowPos(ImVec2{20.0f, 20.0f}, ImGuiCond_Once);
     ImGui::SetNextWindowSize(ImVec2{500.0f, 260.0f}, ImGuiCond_Once);
-    if (!ImGui::Begin("dans_vk Camera"))
+    if (!ImGui::Begin(is_2d_mode() ? "dans_vk Camera (2D)" : "dans_vk Camera (3D)"))
     {
         ImGui::End();
         return;
     }
     ImGui::PushItemWidth(300.0f);
 
-    auto fov_degrees = glm::degrees(camera.fov_y());
-    if (ImGui::SliderFloat("FOV", &fov_degrees, 10.0f, 120.0f, "%.1f deg"))
+    if (is_2d_mode())
     {
-        camera.set_fov_y(glm::radians(std::clamp(fov_degrees, 10.0f, 120.0f)));
-    }
-    auto orbit_sensitivity = camera.orbit_sensitivity();
-    if (ImGui::SliderFloat("Orbit sensitivity", &orbit_sensitivity, 0.10f, 4.0f, "%.2f"))
-    {
-        camera.set_orbit_sensitivity(std::clamp(orbit_sensitivity, 0.10f, 4.0f));
-    }
-    auto pivot_sensitivity = camera.pivot_sensitivity();
-    if (ImGui::SliderFloat("Pivot sensitivity", &pivot_sensitivity, 0.10f, 4.0f, "%.2f"))
-    {
-        camera.set_pivot_sensitivity(std::clamp(pivot_sensitivity, 0.10f, 4.0f));
-    }
-    auto zoom_sensitivity = camera.zoom_sensitivity();
-    if (ImGui::SliderFloat("Zoom sensitivity", &zoom_sensitivity, 0.10f, 4.0f, "%.2f"))
-    {
-        camera.set_zoom_sensitivity(std::clamp(zoom_sensitivity, 0.10f, 4.0f));
-    }
-
-    draw_projection_mode_combo(camera);
-
-    auto allow_pivot_move = camera.allow_pivot_move();
-    if (ImGui::Checkbox("Allow pivot move", &allow_pivot_move))
-    {
-        camera.set_allow_pivot_move(allow_pivot_move);
-    }
-    auto clamp_camera_z = camera.clamp_position_z_min();
-    if (ImGui::Checkbox("Clamp camera above Z", &clamp_camera_z))
-    {
-        camera.set_clamp_position_z_min(clamp_camera_z);
-    }
-    if (camera.clamp_position_z_min())
-    {
-        auto min_position_z = camera.min_position_z();
-        if (ImGui::DragFloat("Minimum camera Z", &min_position_z, 0.01f))
+        auto pivot_2d = camera_2d_pivot;
+        if (ImGui::DragFloat2("Pivot", &pivot_2d.x, 1.0f))
         {
-            camera.set_min_position_z(min_position_z);
+            camera_2d_pivot = pivot_2d;
         }
+        auto zoom = camera_2d_zoom;
+        if (ImGui::SliderFloat("Zoom (world per logical px)", &zoom, 0.05f, 10.0f, "%.3f"))
+        {
+            camera_2d_zoom = std::max(0.001f, zoom);
+        }
+        if (ImGui::Button("Reset camera"))
+        {
+            camera_2d_pivot = Vec2{0.0f, 0.0f};
+            camera_2d_zoom = 1.0f;
+        }
+        ImGui::Text(
+            "Frame %.2f ms | shapes %u | text instances per frame",
+            static_cast<f64>(stats.last_frame_ms),
+            stats.debug_segments
+        );
     }
-    ImGui::BeginDisabled(!camera.allow_pivot_move());
-    auto pivot = camera.pivot();
-    if (ImGui::DragFloat3("Pivot", &pivot.x, 0.01f))
+    else
     {
-        camera.set_pivot(pivot);
+        auto fov_degrees = glm::degrees(camera.fov_y());
+        if (ImGui::SliderFloat("FOV", &fov_degrees, 10.0f, 120.0f, "%.1f deg"))
+        {
+            camera.set_fov_y(glm::radians(std::clamp(fov_degrees, 10.0f, 120.0f)));
+        }
+        auto orbit_sensitivity = camera.orbit_sensitivity();
+        if (ImGui::SliderFloat("Orbit sensitivity", &orbit_sensitivity, 0.10f, 4.0f, "%.2f"))
+        {
+            camera.set_orbit_sensitivity(std::clamp(orbit_sensitivity, 0.10f, 4.0f));
+        }
+        auto pivot_sensitivity = camera.pivot_sensitivity();
+        if (ImGui::SliderFloat("Pivot sensitivity", &pivot_sensitivity, 0.10f, 4.0f, "%.2f"))
+        {
+            camera.set_pivot_sensitivity(std::clamp(pivot_sensitivity, 0.10f, 4.0f));
+        }
+        auto zoom_sensitivity = camera.zoom_sensitivity();
+        if (ImGui::SliderFloat("Zoom sensitivity", &zoom_sensitivity, 0.10f, 4.0f, "%.2f"))
+        {
+            camera.set_zoom_sensitivity(std::clamp(zoom_sensitivity, 0.10f, 4.0f));
+        }
+
+        draw_projection_mode_combo(camera);
+
+        auto allow_pivot_move = camera.allow_pivot_move();
+        if (ImGui::Checkbox("Allow pivot move", &allow_pivot_move))
+        {
+            camera.set_allow_pivot_move(allow_pivot_move);
+        }
+        auto clamp_camera_z = camera.clamp_position_z_min();
+        if (ImGui::Checkbox("Clamp camera above Z", &clamp_camera_z))
+        {
+            camera.set_clamp_position_z_min(clamp_camera_z);
+        }
+        if (camera.clamp_position_z_min())
+        {
+            auto min_position_z = camera.min_position_z();
+            if (ImGui::DragFloat("Minimum camera Z", &min_position_z, 0.01f))
+            {
+                camera.set_min_position_z(min_position_z);
+            }
+        }
+        ImGui::BeginDisabled(!camera.allow_pivot_move());
+        auto pivot = camera.pivot();
+        if (ImGui::DragFloat3("Pivot", &pivot.x, 0.01f))
+        {
+            camera.set_pivot(pivot);
+        }
+        ImGui::EndDisabled();
+        ImGui::Text(
+            "Frame %.2f ms | draw %u/%u | debug %u | lights %u",
+            static_cast<f64>(stats.last_frame_ms),
+            stats.mesh_draws,
+            stats.mesh_batches,
+            stats.debug_segments,
+            stats.lights
+        );
     }
-    ImGui::EndDisabled();
-    ImGui::Text(
-        "Frame %.2f ms | draw %u/%u | debug %u | lights %u",
-        static_cast<f64>(stats.last_frame_ms),
-        stats.mesh_draws,
-        stats.mesh_batches,
-        stats.debug_segments,
-        stats.lights
-    );
     ImGui::Text(
         "Descriptor indexing: %s",
         descriptor_indexing.descriptor_indexing ? "available" : "not available"
@@ -4893,6 +4921,24 @@ auto Runtime::Impl::handle_event(const SDL_Event& event) -> void
             case SDLK_N:
                 input.key_n_pressed = true;
                 break;
+            case SDLK_L:
+                input.key_l_pressed = true;
+                break;
+            case SDLK_M:
+                input.key_m_pressed = true;
+                break;
+            case SDLK_O:
+                input.key_o_pressed = true;
+                break;
+            case SDLK_P:
+                input.key_p_pressed = true;
+                break;
+            case SDLK_LEFT:
+                input.key_left_pressed = true;
+                break;
+            case SDLK_RIGHT:
+                input.key_right_pressed = true;
+                break;
             case SDLK_RETURN:
             case SDLK_KP_ENTER:
                 input.key_enter_pressed = true;
@@ -4925,11 +4971,17 @@ auto Runtime::Impl::handle_event(const SDL_Event& event) -> void
         {
             if (is_2d_mode())
             {
-                panning = true;
+                // Defer the pan/click distinction to MOUSE_UP / MOUSE_MOTION so
+                // a quick RMB tap becomes a right-click event and a drag becomes
+                // a pan. Threshold = 4 px.
+                rmb_pending_click = true;
+                rmb_press_px = input.mouse_px;
+                input.right_button_down = true;
             }
             else
             {
                 orbiting = true;
+                input.right_button_down = true;
             }
         }
         else if (event.button.button == SDL_BUTTON_MIDDLE)
@@ -4954,12 +5006,23 @@ auto Runtime::Impl::handle_event(const SDL_Event& event) -> void
         {
             if (is_2d_mode())
             {
+                if (rmb_pending_click)
+                {
+                    input.right_click = MouseClick{
+                        .occurred = true,
+                        .position_px = input.mouse_px,
+                        .click_count = static_cast<u8>(event.button.clicks),
+                        .modifiers = current_modifiers(),
+                    };
+                }
+                rmb_pending_click = false;
                 panning = false;
             }
             else
             {
                 orbiting = false;
             }
+            input.right_button_down = false;
         }
         else if (event.button.button == SDL_BUTTON_MIDDLE)
         {
@@ -4978,6 +5041,16 @@ auto Runtime::Impl::handle_event(const SDL_Event& event) -> void
         SDL_GetWindowSizeInPixels(window, &framebuffer_width, &framebuffer_height);
         if (is_2d_mode())
         {
+            if (rmb_pending_click)
+            {
+                const auto dx = input.mouse_px.x - rmb_press_px.x;
+                const auto dy = input.mouse_px.y - rmb_press_px.y;
+                if (std::abs(dx) > 4.0f or std::abs(dy) > 4.0f)
+                {
+                    rmb_pending_click = false;
+                    panning = true;
+                }
+            }
             if (panning)
             {
                 camera_2d_pivot.x -= event.motion.xrel * camera_2d_zoom;
@@ -5055,6 +5128,7 @@ auto Runtime::Impl::reset_input_frame() -> void
     auto mouse_y = 0.0f;
     (void) SDL_GetMouseState(&mouse_x, &mouse_y);
     input.left_click = {};
+    input.right_click = {};
     input.space_pressed = false;
     input.key_g_pressed = false;
     input.key_r_pressed = false;
@@ -5064,6 +5138,12 @@ auto Runtime::Impl::reset_input_frame() -> void
     input.key_z_pressed = false;
     input.key_c_pressed = false;
     input.key_n_pressed = false;
+    input.key_l_pressed = false;
+    input.key_m_pressed = false;
+    input.key_o_pressed = false;
+    input.key_p_pressed = false;
+    input.key_left_pressed = false;
+    input.key_right_pressed = false;
     input.key_enter_pressed = false;
     input.key_delete_pressed = false;
     input.key_plus_pressed = false;
