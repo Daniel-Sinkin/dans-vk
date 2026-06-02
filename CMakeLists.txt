@@ -88,9 +88,21 @@ if(NOT TARGET dans::util)
   add_subdirectory(external/dans-util EXCLUDE_FROM_ALL)
 endif()
 
+# dans-core (types/markers) as a first-class header-only target. The headers
+# currently ride along inside the dans-util vendor tree; repoint this at a
+# hoisted vendor/dans-core if that lands.
+if(NOT TARGET dans::core)
+  add_library(dans_core INTERFACE)
+  add_library(dans::core ALIAS dans_core)
+  target_include_directories(dans_core SYSTEM INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/external/dans-util/vendor/dans-core/include>
+  )
+endif()
+
 set(DANS_VK_CORE_SOURCES
   dans/vk/assets.cpp
   dans/vk/camera.cpp
+  dans/vk/drawlist.cpp
   dans/vk/geometry.cpp
   dans/vk/mesh.cpp
 )
@@ -103,8 +115,22 @@ target_include_directories(dans_vk_core PUBLIC
 target_include_directories(dans_vk_core SYSTEM PRIVATE
   external
 )
-target_link_libraries(dans_vk_core PUBLIC glm::glm dans::util)
+target_link_libraries(dans_vk_core PUBLIC glm::glm dans::core)
 target_link_libraries(dans_vk_core PRIVATE dans_vk_warnings)
+
+# dans::font - standalone CPU glyph/atlas baking (stb_truetype). No Vulkan, no
+# glm; depends only on dans-core. Lives here until it graduates to its own repo.
+add_library(dans_font STATIC
+  dans/font/font_atlas.cpp
+  dans/font/stb_truetype_impl.cpp
+)
+add_library(dans::font ALIAS dans_font)
+target_include_directories(dans_font PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+)
+target_include_directories(dans_font SYSTEM PRIVATE external/stb)
+target_link_libraries(dans_font PUBLIC dans::core)
+target_link_libraries(dans_font PRIVATE dans_vk_warnings)
 
 add_library(dans_vk_picker STATIC dans/vk/plugins/picker.cpp)
 add_library(dans::vk::picker ALIAS dans_vk_picker)
@@ -211,18 +237,15 @@ if(DANS_VK_BUILD_RUNTIME AND Vulkan_FOUND)
 
   add_library(dans_vk STATIC
     dans/vk/assets_write.cpp
-    dans/vk/font_atlas.cpp
     dans/vk/runtime.cpp
     dans/vk/stb_image_impl.cpp
     dans/vk/stb_image_write_impl.cpp
-    dans/vk/stb_truetype_impl.cpp
   )
   add_library(dans::vk ALIAS dans_vk)
   add_library(dans::vk::runtime ALIAS dans_vk)
   set_source_files_properties(
     dans/vk/stb_image_impl.cpp
     dans/vk/stb_image_write_impl.cpp
-    dans/vk/stb_truetype_impl.cpp
     PROPERTIES SKIP_PRECOMPILE_HEADERS ON
   )
   add_dependencies(dans_vk dans_vk_shaders)
@@ -238,6 +261,7 @@ if(DANS_VK_BUILD_RUNTIME AND Vulkan_FOUND)
   )
   target_link_libraries(dans_vk PUBLIC
     dans_vk_core
+    dans_font
     dans_vk_imgui_vulkan
     dans_vk_vma
     SDL3::SDL3

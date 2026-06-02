@@ -1,6 +1,6 @@
-// dans/vk/font_atlas.cpp
+// dans/font/font_atlas.cpp
 //
-#include "dans/vk/font_atlas.hpp"
+#include "dans/font/font_atlas.hpp"
 // Externals
 #include <stb_truetype.h>
 // StdLib
@@ -9,7 +9,7 @@
 #include <stdexcept>
 //
 
-namespace dans::vk
+namespace dans::font
 {
 
 namespace
@@ -156,4 +156,4 @@ auto line_advance(const FontMetrics& metrics) noexcept -> f32
     return metrics.ascent - metrics.descent + metrics.line_gap;
 }
 
-}  // namespace dans::vk
+}  // namespace dans::font

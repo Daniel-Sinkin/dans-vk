@@ -1,14 +1,14 @@
-// dans/vk/font_atlas.hpp
+// dans/font/font_atlas.hpp
 //
 #pragma once
 
-#include "dans/vk/types.hpp"
+#include <dans/types.hpp>
 // StdLib
 #include <filesystem>
 #include <vector>
 //
 
-namespace dans::vk
+namespace dans::font
 {
 
 // atlas_* values are in atlas (texture) pixels and feed UV computations.
@@ -67,4 +67,4 @@ struct BakedFont
 
 [[nodiscard]] auto line_advance(const FontMetrics& metrics) noexcept -> f32;
 
-}  // namespace dans::vk
+}  // namespace dans::font
