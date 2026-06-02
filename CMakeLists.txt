@@ -28,6 +28,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# MSVC's CRT headers mark fopen/strcpy/etc. deprecated in favour of their
+# non-standard _s variants; under -Werror that breaks the build on Windows.
+if(WIN32)
+  add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+endif()
+
 option(DANS_VK_BUILD_RUNTIME "Build the Vulkan runtime target" ON)
 option(DANS_VK_BUILD_EXAMPLES "Build dans_vk example applications" ${DANS_VK_IS_TOP_LEVEL})
 option(DANS_VK_BUILD_TESTS "Build dans_vk tests" ${DANS_VK_IS_TOP_LEVEL})
@@ -255,6 +261,17 @@ if(DANS_VK_BUILD_RUNTIME AND Vulkan_FOUND)
       DANS_VK_DEFAULT_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/external/fonts/Inter-Regular.ttf"
     )
     dans_vk_enable_pch(dans_vk_2d_app)
+
+    # Windows loads SDL3.dll from the executable's own directory, so copy it
+    # next to each app after building.
+    if(WIN32)
+      foreach(DANS_VK_APP dans_vk_basic_app dans_vk_2d_app)
+        add_custom_command(TARGET ${DANS_VK_APP} POST_BUILD
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:SDL3::SDL3> $<TARGET_FILE_DIR:${DANS_VK_APP}>
+          VERBATIM)
+      endforeach()
+    endif()
   endif()
 
   if(DANS_VK_BUILD_TESTS)
