@@ -1,6 +1,6 @@
 #include "dans/vk/plugins/manipulator.hpp"
 
-#include "dans/vk/math.hpp"
+#include "dans/geom/geometry.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -8,6 +8,8 @@
 
 namespace dans::vk
 {
+using dans::geom::normalize_or;
+
 namespace
 {
 [[nodiscard]] auto axis_vector(ManipulatorAxis axis, const Camera& camera) noexcept -> Vec3

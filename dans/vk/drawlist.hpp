@@ -3,7 +3,7 @@
 #pragma once
 
 #include "dans/vk/debug_draw.hpp"
-#include "dans/vk/mesh.hpp"
+#include "dans/mesh/mesh.hpp"
 #include "dans/vk/shape_draw.hpp"
 #include "dans/vk/text_draw.hpp"
 #include "dans/vk/types.hpp"
@@ -14,6 +14,7 @@
 
 namespace dans::vk
 {
+using dans::mesh::Transform;
 
 struct MaterialTextures
 {

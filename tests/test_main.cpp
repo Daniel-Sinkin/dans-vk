@@ -1,7 +1,7 @@
-#include "dans/vk/assets.hpp"
-#include "dans/vk/camera.hpp"
-#include "dans/vk/geometry.hpp"
-#include "dans/vk/mesh.hpp"
+#include "dans/mesh_io/gltf.hpp"
+#include "dans/camera/camera.hpp"
+#include "dans/geom/geometry.hpp"
+#include "dans/mesh/mesh.hpp"
 #include "dans/vk/plugins/manipulator.hpp"
 #include "dans/vk/plugins/picker.hpp"
 #include "dans/vk/plugins/viz.hpp"
@@ -187,7 +187,7 @@ template <typename T>
 concept Addable = requires(T a, T b) { a + b; };
 
 static_assert(!Addable<dans::vk::Color>);
-static_assert(sizeof(dans::vk::ProjectionMode) == sizeof(dans::u8));
+static_assert(sizeof(dans::camera::ProjectionMode) == sizeof(dans::u8));
 static_assert(sizeof(dans::vk::PickerShapeType) == sizeof(dans::u8));
 
 auto test_color_types() -> void
@@ -213,14 +213,14 @@ auto test_color_types() -> void
 
 auto test_quad_mesh() -> void
 {
-    const auto mesh = dans::vk::make_quad(2.0f);
+    const auto mesh = dans::mesh::make_quad(2.0f);
     check(mesh.vertices.size() == 4u, "quad has four vertices");
     check(mesh.indices.size() == 6u, "quad has two triangles");
-    check(dans::vk::has_valid_indices(mesh), "quad indices are valid");
-    check(dans::vk::triangle_count(mesh) == 2u, "quad triangle count");
+    check(dans::mesh::has_valid_indices(mesh), "quad indices are valid");
+    check(dans::mesh::triangle_count(mesh) == 2u, "quad triangle count");
     check(near(mesh.vertices[0].texcoord.x, 0.0f), "quad has uvs");
     check(near(mesh.vertices[2].texcoord.y, 1.0f), "quad uv max y");
-    const auto aabb = dans::vk::aabb_of(mesh);
+    const auto aabb = dans::mesh::aabb_of(mesh);
     check(near(aabb.min.x, -1.0f) and near(aabb.max.x, 1.0f), "quad x bounds");
     check(near(aabb.min.y, -1.0f) and near(aabb.max.y, 1.0f), "quad y bounds");
     check(near(aabb.min.z, 0.0f) and near(aabb.max.z, 0.0f), "quad lies on z=0");
@@ -228,10 +228,10 @@ auto test_quad_mesh() -> void
 
 auto test_cube_mesh() -> void
 {
-    const auto mesh = dans::vk::make_cube(2.0f);
+    const auto mesh = dans::mesh::make_cube(2.0f);
     check(mesh.vertices.size() == 24u, "cube has per-face vertices");
     check(mesh.indices.size() == 36u, "cube has 12 triangles");
-    check(dans::vk::has_valid_indices(mesh), "cube indices are valid");
+    check(dans::mesh::has_valid_indices(mesh), "cube indices are valid");
     for (const auto& vertex : mesh.vertices)
     {
         check(near(glm::length(vertex.normal), 1.0f), "cube normals are unit length");
@@ -243,7 +243,7 @@ auto test_cube_mesh() -> void
 
 auto test_quantized_position_normal_mesh() -> void
 {
-    dans::vk::QuantizedPositionNormalMeshData mesh{
+    dans::mesh::QuantizedPositionNormalMeshData mesh{
         .decode_origin = {1.0f, 2.0f, 3.0f},
         .decode_extent = {4.0f, 5.0f, 6.0f},
         .vertices =
@@ -254,23 +254,23 @@ auto test_quantized_position_normal_mesh() -> void
             },
         .indices = {0u, 1u, 2u},
     };
-    check(dans::vk::has_valid_indices(mesh), "quantized mesh indices are valid");
-    check(dans::vk::triangle_count(mesh) == 1zu, "quantized mesh triangle count");
-    const auto aabb = dans::vk::aabb_of(mesh);
+    check(dans::mesh::has_valid_indices(mesh), "quantized mesh indices are valid");
+    check(dans::mesh::triangle_count(mesh) == 1zu, "quantized mesh triangle count");
+    const auto aabb = dans::mesh::aabb_of(mesh);
     check(near(aabb.min.x, 1.0f) and near(aabb.max.x, 5.0f), "quantized mesh x bounds");
     check(near(aabb.min.y, 2.0f) and near(aabb.max.y, 7.0f), "quantized mesh y bounds");
     check(near(aabb.min.z, 3.0f) and near(aabb.max.z, 9.0f), "quantized mesh z bounds");
 
     mesh.indices.push_back(7u);
-    check(!dans::vk::has_valid_indices(mesh), "quantized mesh rejects invalid index");
+    check(!dans::mesh::has_valid_indices(mesh), "quantized mesh rejects invalid index");
 }
 
 auto test_sphere_mesh() -> void
 {
     constexpr auto slices = 12u;
     constexpr auto stacks = 6u;
-    const auto mesh = dans::vk::make_uv_sphere(
-        dans::vk::UvSphereConfig{
+    const auto mesh = dans::mesh::make_uv_sphere(
+        dans::mesh::UvSphereConfig{
             .radius = 2.0f,
             .slices = slices,
             .stacks = stacks,
@@ -282,7 +282,7 @@ auto test_sphere_mesh() -> void
         static_cast<dans::usize>(slices) * static_cast<dans::usize>(stacks) * 6u;
     check(mesh.vertices.size() == expected_vertices, "sphere vertex count");
     check(mesh.indices.size() == expected_indices, "sphere index count");
-    check(dans::vk::has_valid_indices(mesh), "sphere indices are valid");
+    check(dans::mesh::has_valid_indices(mesh), "sphere indices are valid");
     for (const auto& vertex : mesh.vertices)
     {
         check(finite_vec3(vertex.position), "sphere positions are finite");
@@ -378,19 +378,19 @@ auto test_gltf_assets() -> void
         out << triangle_no_normals_gltf;
     }
 
-    const auto mesh = dans::vk::load_gltf_mesh(
+    const auto mesh = dans::mesh_io::load_gltf_mesh(
         triangle_path,
-        dans::vk::GltfMeshLoadConfig{.color = dans::vk::Color::cyan}
+        dans::mesh_io::GltfMeshLoadConfig{.color = dans::vk::Color::cyan}
     );
     check(mesh.vertices.size() == 3zu, "gltf loader reads vertex count");
     check(mesh.indices.size() == 3zu, "gltf loader reads index count");
-    check(dans::vk::has_valid_indices(mesh), "gltf loader reads valid indices");
+    check(dans::mesh::has_valid_indices(mesh), "gltf loader reads valid indices");
     check(near(mesh.vertices[1].position.x, 1.0f), "gltf loader reads positions");
     check(near(mesh.vertices[2].texcoord.y, 1.0f), "gltf loader reads texcoords");
     check(near(glm::length(mesh.vertices[0].normal), 1.0f), "gltf loader reads normals");
     check(near(mesh.vertices[0].color.g(), 1.0f), "gltf loader applies mesh color");
 
-    const auto generated_normal_mesh = dans::vk::load_gltf_mesh(triangle_no_normals_path);
+    const auto generated_normal_mesh = dans::mesh_io::load_gltf_mesh(triangle_no_normals_path);
     check(generated_normal_mesh.vertices.size() == 3zu, "gltf loader reads missing-normal mesh");
     for (const auto& vertex : generated_normal_mesh.vertices)
     {
@@ -407,7 +407,7 @@ auto test_gltf_assets() -> void
             static_cast<std::streamsize>(glb_bytes.size())
         );
     }
-    const auto glb_mesh = dans::vk::load_gltf_mesh(glb_path);
+    const auto glb_mesh = dans::mesh_io::load_gltf_mesh(glb_path);
     check(glb_mesh.vertices.size() == 3zu, "glb loader reads vertex count");
     check(glb_mesh.indices.size() == 3zu, "glb loader reads index count");
     check(near(glb_mesh.vertices[2].texcoord.y, 1.0f), "glb loader ignores unknown chunks");
@@ -424,7 +424,7 @@ auto test_gltf_assets() -> void
     auto rejected_non_json_first_chunk = false;
     try
     {
-        (void) dans::vk::load_gltf_mesh(glb_path);
+        (void) dans::mesh_io::load_gltf_mesh(glb_path);
     }
     catch (const std::runtime_error&)
     {
@@ -448,7 +448,7 @@ auto test_gltf_assets() -> void
     auto rejected_truncated_chunk_header = false;
     try
     {
-        (void) dans::vk::load_gltf_mesh(glb_path);
+        (void) dans::mesh_io::load_gltf_mesh(glb_path);
     }
     catch (const std::runtime_error&)
     {
@@ -460,7 +460,7 @@ auto test_gltf_assets() -> void
 
 auto test_camera_projection() -> void
 {
-    dans::vk::Camera camera{};
+    dans::camera::Camera camera{};
     camera.set_distance(3.0f);
     const auto position = camera.position();
     check(finite_vec3(position), "camera position is finite");
@@ -478,7 +478,7 @@ auto test_camera_projection() -> void
 
 auto test_camera_config() -> void
 {
-    dans::vk::Camera camera{};
+    dans::camera::Camera camera{};
     auto& configured = camera.configure({
         .pivot = 0.7f * dans::vk::k_axis_z,
         .distance = 5.4f,
@@ -496,40 +496,40 @@ auto test_camera_config() -> void
 
 auto test_geometry_helpers() -> void
 {
-    const dans::vk::Ray ray{
+    const dans::geom::Ray ray{
         .origin = {0.0f, 0.0f, 0.0f},
         .direction = dans::vk::k_axis_x,
     };
-    const auto sphere_hit = dans::vk::intersect_sphere(
+    const auto sphere_hit = dans::geom::intersect_sphere(
         ray,
-        dans::vk::Sphere{
+        dans::geom::Sphere{
             .center = {3.0f, 0.0f, 0.0f},
             .radius = 1.0f,
         }
     );
     check(sphere_hit.has_value() and near(*sphere_hit, 2.0f), "pick ray intersects sphere");
 
-    const auto sphere_miss = dans::vk::intersect_sphere(
+    const auto sphere_miss = dans::geom::intersect_sphere(
         ray,
-        dans::vk::Sphere{
+        dans::geom::Sphere{
             .center = {0.0f, 3.0f, 0.0f},
             .radius = 0.5f,
         }
     );
     check(!sphere_miss.has_value(), "pick ray misses sphere");
 
-    const auto aabb_hit = dans::vk::intersect_aabb(
+    const auto aabb_hit = dans::geom::intersect_aabb(
         ray,
-        dans::vk::Aabb{
+        dans::geom::Aabb{
             .min = {4.0f, -1.0f, -1.0f},
             .max = {5.0f, 1.0f, 1.0f},
         }
     );
     check(aabb_hit.has_value() and near(*aabb_hit, 4.0f), "pick ray intersects aabb");
 
-    const auto reversed_aabb_hit = dans::vk::intersect_aabb(
+    const auto reversed_aabb_hit = dans::geom::intersect_aabb(
         ray,
-        dans::vk::Aabb{
+        dans::geom::Aabb{
             .min = {5.0f, 1.0f, 1.0f},
             .max = {4.0f, -1.0f, -1.0f},
         }
@@ -539,33 +539,33 @@ auto test_geometry_helpers() -> void
         "pick ray normalizes reversed aabb bounds"
     );
 
-    const auto obb_hit = dans::vk::hit_obb(
-        dans::vk::Ray{.origin = {0.0f, 0.0f, 0.0f}, .direction = dans::vk::k_axis_y},
-        dans::vk::Obb{.center = {0.0f, 3.0f, 0.0f}, .half_extent = {0.5f, 0.5f, 0.5f}}
+    const auto obb_hit = dans::geom::hit_obb(
+        dans::geom::Ray{.origin = {0.0f, 0.0f, 0.0f}, .direction = dans::vk::k_axis_y},
+        dans::geom::Obb{.center = {0.0f, 3.0f, 0.0f}, .half_extent = {0.5f, 0.5f, 0.5f}}
     );
     check(obb_hit.has_value() and near(obb_hit->distance, 2.5f), "ray hits obb");
 
-    const auto capsule_hit = dans::vk::hit_capsule(
-        dans::vk::Ray{.origin = {-2.0f, 0.0f, 0.0f}, .direction = dans::vk::k_axis_x},
-        dans::vk::Capsule{.a = -dans::vk::k_axis_z, .b = dans::vk::k_axis_z, .radius = 0.25f}
+    const auto capsule_hit = dans::geom::hit_capsule(
+        dans::geom::Ray{.origin = {-2.0f, 0.0f, 0.0f}, .direction = dans::vk::k_axis_x},
+        dans::geom::Capsule{.a = -dans::vk::k_axis_z, .b = dans::vk::k_axis_z, .radius = 0.25f}
     );
     check(capsule_hit.has_value(), "ray hits capsule");
 
-    dans::vk::Camera camera{};
+    dans::camera::Camera camera{};
     camera.configure({
         .pivot = {0.0f, 0.0f, 0.0f},
         .distance = 4.0f,
         .yaw = 0.0f,
         .pitch = 0.0f,
     });
-    const auto center_ray = dans::vk::make_camera_ray(camera, {400.0f, 300.0f}, {800.0f, 600.0f});
+    const auto center_ray = dans::camera::make_camera_ray(camera, {400.0f, 300.0f}, {800.0f, 600.0f});
     check(finite_vec3(center_ray.origin), "pick ray origin is finite");
     check(finite_vec3(center_ray.direction), "pick ray direction is finite");
     check(near(glm::length(center_ray.direction), 1.0f, 1.0e-4f), "pick ray direction is unit");
-    const auto upper_ray = dans::vk::make_camera_ray(camera, {400.0f, 200.0f}, {800.0f, 600.0f});
-    const auto lower_ray = dans::vk::make_camera_ray(camera, {400.0f, 400.0f}, {800.0f, 600.0f});
-    const auto left_ray = dans::vk::make_camera_ray(camera, {300.0f, 300.0f}, {800.0f, 600.0f});
-    const auto right_ray = dans::vk::make_camera_ray(camera, {500.0f, 300.0f}, {800.0f, 600.0f});
+    const auto upper_ray = dans::camera::make_camera_ray(camera, {400.0f, 200.0f}, {800.0f, 600.0f});
+    const auto lower_ray = dans::camera::make_camera_ray(camera, {400.0f, 400.0f}, {800.0f, 600.0f});
+    const auto left_ray = dans::camera::make_camera_ray(camera, {300.0f, 300.0f}, {800.0f, 600.0f});
+    const auto right_ray = dans::camera::make_camera_ray(camera, {500.0f, 300.0f}, {800.0f, 600.0f});
     check(upper_ray.direction.z > 0.0f, "pick ray maps upper screen pixels toward world up");
     check(lower_ray.direction.z < 0.0f, "pick ray maps lower screen pixels toward world down");
     check(left_ray.direction.y < 0.0f, "pick ray maps left screen pixels to camera left");
@@ -585,7 +585,7 @@ auto test_picker_plugin() -> void
         .object_id = aabb_id,
         .aabb = {.min = {5.0f, -1.0f, -1.0f}, .max = {6.0f, 1.0f, 1.0f}},
     });
-    const dans::vk::Ray ray{
+    const dans::geom::Ray ray{
         .origin = {0.0f, 0.0f, 0.0f},
         .direction = dans::vk::k_axis_x,
     };
@@ -637,7 +637,7 @@ auto test_picker_plugin() -> void
         "picker supports capsule targets"
     );
 
-    dans::vk::Camera camera{};
+    dans::camera::Camera camera{};
     camera.configure({
         .pivot = {0.0f, 0.0f, 0.0f},
         .distance = 4.0f,
@@ -698,7 +698,7 @@ auto test_picker_plugin() -> void
 
 auto test_manipulator_plugin() -> void
 {
-    dans::vk::Camera camera{};
+    dans::camera::Camera camera{};
     camera.configure({
         .pivot = {0.0f, 0.0f, 0.0f},
         .distance = 4.0f,
@@ -707,10 +707,10 @@ auto test_manipulator_plugin() -> void
     });
     const dans::vk::ObjectId id{.value = 88u};
     std::array selected{id};
-    dans::vk::Transform transform{};
+    dans::mesh::Transform transform{};
     dans::vk::Manipulator manipulator{};
     const dans::vk::ManipulatorCallbacks callbacks{
-        .get_transform = [&](dans::vk::ObjectId object_id) -> std::optional<dans::vk::Transform>
+        .get_transform = [&](dans::vk::ObjectId object_id) -> std::optional<dans::mesh::Transform>
         {
             if (object_id.value != id.value)
             {
@@ -718,7 +718,7 @@ auto test_manipulator_plugin() -> void
             }
             return transform;
         },
-        .set_transform = [&](dans::vk::ObjectId object_id, const dans::vk::Transform& updated) -> void
+        .set_transform = [&](dans::vk::ObjectId object_id, const dans::mesh::Transform& updated) -> void
         {
             if (object_id.value == id.value)
             {
@@ -809,7 +809,7 @@ auto test_viz_plugin() -> void
     const auto range = dans::vk::viz::range_from_values(values);
     check(near(range.min, -1.0f) and near(range.max, 9.0f), "viz range scans values");
 
-    dans::vk::Camera camera{};
+    dans::camera::Camera camera{};
     camera.configure({
         .pivot = {0.0f, 0.0f, 0.0f},
         .distance = 4.0f,

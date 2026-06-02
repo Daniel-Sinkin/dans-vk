@@ -1,7 +1,8 @@
 #include "dans/vk/runtime.hpp"
 
 #include "dans/font/font_atlas.hpp"
-#include "dans/vk/math.hpp"
+#include "dans/geom/geometry.hpp"
+#include "dans/image/image.hpp"
 #include "dans/vk/shape_draw.hpp"
 
 #include <SDL3/SDL.h>
@@ -25,8 +26,6 @@
 #include <limits>
 #include <numbers>
 #include <optional>
-#include <stb_image.h>
-#include <stb_image_write.h>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -37,8 +36,14 @@ namespace dans::vk
 {
 using dans::font::BakedFont;
 using dans::font::FontBakeConfig;
+using dans::camera::ProjectionMode;
+using dans::camera::make_camera_ray;
 using dans::font::bake_font;
 using dans::font::glyph_for;
+using dans::geom::normalize_or;
+using dans::mesh::PositionNormalVertex;
+using dans::mesh::QuantizedPositionNormalVertex;
+using dans::mesh::Vertex;
 
 namespace
 {
@@ -1182,31 +1187,10 @@ auto Runtime::Impl::load_texture(
         );
     }
 
-    int width{};
-    int height{};
-    int channels{};
-    auto* pixels = stbi_load(path.string().c_str(), &width, &height, &channels, STBI_rgb_alpha);
-    if (!pixels)
-    {
-        throw std::runtime_error(
-            std::format("failed to load texture {}: {}", path.string(), stbi_failure_reason())
-        );
-    }
-
-    TextureResource texture{};
-    try
-    {
-        const auto format = load_config.srgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
-        texture = create_texture_resource(
-            pixels, static_cast<u32>(width), static_cast<u32>(height), format, 4u
-        );
-    }
-    catch (...)
-    {
-        stbi_image_free(pixels);
-        throw;
-    }
-    stbi_image_free(pixels);
+    const auto loaded = dans::image::load_rgba8(path);
+    const auto format = load_config.srgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
+    auto texture
+        = create_texture_resource(loaded.rgba.data(), loaded.width, loaded.height, format, 4u);
 
     const auto index = static_cast<u32>(textures.size());
     try
@@ -1297,44 +1281,23 @@ auto Runtime::Impl::load_hdr_texture(
         );
     }
 
-    int width{};
-    int height{};
-    int channels{};
-    auto* pixels = stbi_loadf(path.string().c_str(), &width, &height, &channels, STBI_rgb_alpha);
-    if (!pixels)
+    auto loaded = dans::image::load_rgba_f32(path);
+    if (loaded.width == 0u or loaded.height == 0u)
     {
-        throw std::runtime_error(
-            std::format("failed to load HDR texture {}: {}", path.string(), stbi_failure_reason())
-        );
-    }
-    if (width <= 0 or height <= 0)
-    {
-        stbi_image_free(pixels);
         throw std::runtime_error(std::format("HDR texture has invalid size: {}", path.string()));
     }
-    const auto pixel_count = static_cast<usize>(width) * static_cast<usize>(height) * 4zu;
-    for (auto i = 0zu; i < pixel_count; ++i)
+    for (auto& channel : loaded.rgba)
     {
-        pixels[i] *= load_config.exposure;
+        channel *= load_config.exposure;
     }
 
-    TextureResource texture{};
-    try
-    {
-        texture = create_texture_resource(
-            pixels,
-            static_cast<u32>(width),
-            static_cast<u32>(height),
-            VK_FORMAT_R32G32B32A32_SFLOAT,
-            4u * sizeof(f32)
-        );
-    }
-    catch (...)
-    {
-        stbi_image_free(pixels);
-        throw;
-    }
-    stbi_image_free(pixels);
+    auto texture = create_texture_resource(
+        loaded.rgba.data(),
+        loaded.width,
+        loaded.height,
+        VK_FORMAT_R32G32B32A32_SFLOAT,
+        4u * sizeof(f32)
+    );
 
     const auto index = static_cast<u32>(textures.size());
     try
@@ -4912,18 +4875,7 @@ auto Runtime::Impl::write_capture_png(const SwapchainCapture& capture) -> void
     }
     vmaUnmapMemory(vma_allocator, capture.allocation);
 
-    const auto result = stbi_write_png(
-        capture.path.string().c_str(),
-        static_cast<int>(capture.width),
-        static_cast<int>(capture.height),
-        4,
-        rgba.data(),
-        static_cast<int>(capture.width * 4u)
-    );
-    if (result == 0)
-    {
-        throw std::runtime_error("failed to write screenshot PNG");
-    }
+    dans::image::write_rgba8_png(capture.path, capture.width, capture.height, rgba);
 }
 
 auto Runtime::Impl::present_frame() -> void

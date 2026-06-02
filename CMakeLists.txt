@@ -81,30 +81,47 @@ target_compile_options(dans_vk_warnings INTERFACE
 )
 
 if(NOT TARGET glm::glm)
-  add_subdirectory(external/glm EXCLUDE_FROM_ALL)
+  add_subdirectory(vendor/glm EXCLUDE_FROM_ALL)
 endif()
 
-if(NOT TARGET dans::util)
-  add_subdirectory(external/dans-util EXCLUDE_FROM_ALL)
-endif()
+add_library(dans_core INTERFACE)
+add_library(dans::core ALIAS dans_core)
+target_include_directories(dans_core INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+)
 
-# dans-core (types/markers) as a first-class header-only target. The headers
-# currently ride along inside the dans-util vendor tree; repoint this at a
-# hoisted vendor/dans-core if that lands.
-if(NOT TARGET dans::core)
-  add_library(dans_core INTERFACE)
-  add_library(dans::core ALIAS dans_core)
-  target_include_directories(dans_core SYSTEM INTERFACE
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/external/dans-util/vendor/dans-core/include>
-  )
-endif()
+add_library(dans_util STATIC
+  dans/dans-util/chrono.cpp
+  dans/dans-util/dev.cpp
+  dans/dans-util/env.cpp
+  dans/dans-util/fmt.cpp
+  dans/dans-util/random.cpp
+  dans/dans-util/str.cpp
+  dans/dans-util/util.cpp
+)
+add_library(dans::util ALIAS dans_util)
+target_include_directories(dans_util PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+)
+target_link_libraries(dans_util PUBLIC dans::core)
+target_link_libraries(dans_util PRIVATE dans_vk_warnings)
+
+add_library(dans_linalg INTERFACE)
+add_library(dans::linalg ALIAS dans_linalg)
+target_include_directories(dans_linalg INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+)
+target_link_libraries(dans_linalg INTERFACE dans::core glm::glm)
+
+add_library(dans_gfx INTERFACE)
+add_library(dans::gfx ALIAS dans_gfx)
+target_include_directories(dans_gfx INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+)
+target_link_libraries(dans_gfx INTERFACE dans::core dans_linalg glm::glm)
 
 set(DANS_VK_CORE_SOURCES
-  dans/vk/assets.cpp
-  dans/vk/camera.cpp
   dans/vk/drawlist.cpp
-  dans/vk/geometry.cpp
-  dans/vk/mesh.cpp
 )
 
 add_library(dans_vk_core STATIC ${DANS_VK_CORE_SOURCES})
@@ -113,13 +130,11 @@ target_include_directories(dans_vk_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
 target_include_directories(dans_vk_core SYSTEM PRIVATE
-  external
+  vendor
 )
-target_link_libraries(dans_vk_core PUBLIC glm::glm dans::core)
+target_link_libraries(dans_vk_core PUBLIC glm::glm dans::core dans_gfx dans_linalg dans_geom dans_camera dans_mesh)
 target_link_libraries(dans_vk_core PRIVATE dans_vk_warnings)
 
-# dans::font - standalone CPU glyph/atlas baking (stb_truetype). No Vulkan, no
-# glm; depends only on dans-core. Lives here until it graduates to its own repo.
 add_library(dans_font STATIC
   dans/font/font_atlas.cpp
   dans/font/stb_truetype_impl.cpp
@@ -128,9 +143,54 @@ add_library(dans::font ALIAS dans_font)
 target_include_directories(dans_font PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
-target_include_directories(dans_font SYSTEM PRIVATE external/stb)
+target_include_directories(dans_font SYSTEM PRIVATE vendor/stb)
 target_link_libraries(dans_font PUBLIC dans::core)
 target_link_libraries(dans_font PRIVATE dans_vk_warnings)
+
+add_library(dans_geom STATIC dans/geom/geometry.cpp)
+add_library(dans::geom ALIAS dans_geom)
+target_include_directories(dans_geom PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+)
+target_link_libraries(dans_geom PUBLIC dans_linalg)
+target_link_libraries(dans_geom PRIVATE dans_vk_warnings)
+
+add_library(dans_camera STATIC dans/camera/camera.cpp)
+add_library(dans::camera ALIAS dans_camera)
+target_include_directories(dans_camera PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+)
+target_link_libraries(dans_camera PUBLIC dans_geom dans_linalg)
+target_link_libraries(dans_camera PRIVATE dans_vk_warnings)
+
+add_library(dans_mesh STATIC dans/mesh/mesh.cpp)
+add_library(dans::mesh ALIAS dans_mesh)
+target_include_directories(dans_mesh PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+)
+target_link_libraries(dans_mesh PUBLIC dans_geom dans_gfx dans_linalg)
+target_link_libraries(dans_mesh PRIVATE dans_vk_warnings)
+
+add_library(dans_image STATIC dans/image/image.cpp)
+add_library(dans::image ALIAS dans_image)
+target_include_directories(dans_image PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+)
+target_include_directories(dans_image SYSTEM PRIVATE vendor/stb)
+target_link_libraries(dans_image PUBLIC dans::core)
+target_link_libraries(dans_image PRIVATE dans_vk_warnings)
+
+add_library(dans_mesh_io STATIC
+  dans/mesh_io/gltf.cpp
+  dans/mesh_io/gltf_write.cpp
+)
+add_library(dans::mesh_io ALIAS dans_mesh_io)
+target_include_directories(dans_mesh_io PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+)
+target_include_directories(dans_mesh_io SYSTEM PRIVATE vendor vendor/stb)
+target_link_libraries(dans_mesh_io PUBLIC dans_mesh dans_gfx dans_linalg)
+target_link_libraries(dans_mesh_io PRIVATE dans_image dans_vk_warnings)
 
 add_library(dans_vk_picker STATIC dans/vk/plugins/picker.cpp)
 add_library(dans::vk::picker ALIAS dans_vk_picker)
@@ -161,7 +221,7 @@ endfunction()
 if(DANS_VK_BUILD_TESTS)
   enable_testing()
   add_executable(dans_vk_tests tests/test_main.cpp)
-  target_link_libraries(dans_vk_tests PRIVATE dans_vk_picker dans_vk_viz dans_vk_manipulator dans_vk_warnings)
+  target_link_libraries(dans_vk_tests PRIVATE dans_vk_picker dans_vk_viz dans_vk_manipulator dans_mesh_io dans_vk_warnings)
   add_test(NAME dans_vk_tests COMMAND dans_vk_tests)
 endif()
 
@@ -213,48 +273,40 @@ if(DANS_VK_BUILD_RUNTIME AND Vulkan_FOUND)
   set(SDL_OPENGL OFF CACHE BOOL "" FORCE)
   set(SDL_OPENGLES OFF CACHE BOOL "" FORCE)
   if(NOT TARGET SDL3::SDL3)
-    add_subdirectory(external/SDL EXCLUDE_FROM_ALL)
+    add_subdirectory(vendor/SDL EXCLUDE_FROM_ALL)
   endif()
 
   add_library(dans_vk_imgui_vulkan STATIC
-    external/imgui/imgui.cpp
-    external/imgui/imgui_demo.cpp
-    external/imgui/imgui_draw.cpp
-    external/imgui/imgui_tables.cpp
-    external/imgui/imgui_widgets.cpp
-    external/imgui/backends/imgui_impl_sdl3.cpp
-    external/imgui/backends/imgui_impl_vulkan.cpp
+    vendor/imgui/imgui.cpp
+    vendor/imgui/imgui_demo.cpp
+    vendor/imgui/imgui_draw.cpp
+    vendor/imgui/imgui_tables.cpp
+    vendor/imgui/imgui_widgets.cpp
+    vendor/imgui/backends/imgui_impl_sdl3.cpp
+    vendor/imgui/backends/imgui_impl_vulkan.cpp
   )
   target_include_directories(dans_vk_imgui_vulkan SYSTEM PUBLIC
-    external/imgui
-    external/imgui/backends
+    vendor/imgui
+    vendor/imgui/backends
   )
   target_link_libraries(dans_vk_imgui_vulkan PUBLIC SDL3::SDL3 Vulkan::Vulkan)
 
   add_library(dans_vk_vma STATIC dans/vk/vma_support.cpp)
-  target_include_directories(dans_vk_vma SYSTEM PUBLIC external/vma/include)
+  target_include_directories(dans_vk_vma SYSTEM PUBLIC vendor/vma/include)
   target_link_libraries(dans_vk_vma PUBLIC Vulkan::Vulkan)
 
   add_library(dans_vk STATIC
-    dans/vk/assets_write.cpp
     dans/vk/runtime.cpp
-    dans/vk/stb_image_impl.cpp
-    dans/vk/stb_image_write_impl.cpp
   )
   add_library(dans::vk ALIAS dans_vk)
   add_library(dans::vk::runtime ALIAS dans_vk)
-  set_source_files_properties(
-    dans/vk/stb_image_impl.cpp
-    dans/vk/stb_image_write_impl.cpp
-    PROPERTIES SKIP_PRECOMPILE_HEADERS ON
-  )
   add_dependencies(dans_vk dans_vk_shaders)
   target_include_directories(dans_vk PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
   )
   target_include_directories(dans_vk SYSTEM PRIVATE
-    external
-    external/stb
+    vendor
+    vendor/stb
   )
   target_compile_definitions(dans_vk PRIVATE
     DANS_VK_SHADER_DIR="${DANS_VK_SHADER_OUTPUT_DIR}"
@@ -262,6 +314,7 @@ if(DANS_VK_BUILD_RUNTIME AND Vulkan_FOUND)
   target_link_libraries(dans_vk PUBLIC
     dans_vk_core
     dans_font
+    dans_image
     dans_vk_imgui_vulkan
     dans_vk_vma
     SDL3::SDL3
@@ -274,26 +327,14 @@ if(DANS_VK_BUILD_RUNTIME AND Vulkan_FOUND)
     add_executable(dans_vk_basic_app app/main.cpp)
     target_link_libraries(dans_vk_basic_app PRIVATE dans_vk dans_vk_viz dans_vk_warnings)
     target_compile_definitions(dans_vk_basic_app PRIVATE
-      DANS_VK_DEFAULT_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/external/fonts/Inter-Regular.ttf"
+      DANS_VK_DEFAULT_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/vendor/fonts/Inter-Regular.ttf"
     )
     dans_vk_enable_pch(dans_vk_basic_app)
-
-    add_executable(dans_vk_2d_app app/main_2d.cpp)
-    target_link_libraries(dans_vk_2d_app PRIVATE dans_vk dans_vk_warnings)
-    target_include_directories(dans_vk_2d_app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_include_directories(dans_vk_2d_app SYSTEM PRIVATE
-      ${CMAKE_CURRENT_SOURCE_DIR}/external
-      ${CMAKE_CURRENT_SOURCE_DIR}/app/viz/external
-    )
-    target_compile_definitions(dans_vk_2d_app PRIVATE
-      DANS_VK_DEFAULT_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/external/fonts/Inter-Regular.ttf"
-    )
-    dans_vk_enable_pch(dans_vk_2d_app)
 
     # Windows loads SDL3.dll from the executable's own directory, so copy it
     # next to each app after building.
     if(WIN32)
-      foreach(DANS_VK_APP dans_vk_basic_app dans_vk_2d_app)
+      foreach(DANS_VK_APP dans_vk_basic_app)
         add_custom_command(TARGET ${DANS_VK_APP} POST_BUILD
           COMMAND ${CMAKE_COMMAND} -E copy_if_different
             $<TARGET_FILE:SDL3::SDL3> $<TARGET_FILE_DIR:${DANS_VK_APP}>

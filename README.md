@@ -21,7 +21,12 @@ target_link_libraries(my_app PRIVATE dans::vk dans::vk::viz dans::vk::picker)
 When this repo is included with `add_subdirectory`, examples and tests are off by
 default. The reusable targets are:
 
-- `dans_vk_core` / `dans::vk::core` for CPU-side math, geometry, mesh, camera, glTF helpers
+- CPU-side libraries that do not need Vulkan: `dans::linalg`, `dans::gfx`,
+  `dans::geom`, `dans::camera`, `dans::mesh`, `dans::mesh_io` (glTF/GLB load and
+  save), `dans::image`, and `dans::font`, plus the `dans::core` / `dans::util`
+  helpers
+- `dans_vk_core` / `dans::vk::core` for the CPU-side `DrawList` and shared
+  Vulkan-facing types
 - `dans_vk` / `dans::vk` / `dans::vk::runtime` for the Vulkan runtime
 - `dans_vk_picker` / `dans::vk::picker`, `dans_vk_viz` / `dans::vk::viz`, and
   `dans_vk_manipulator` / `dans::vk::manipulator` for optional helper plugins

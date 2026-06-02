@@ -2,7 +2,7 @@
 //
 #pragma once
 
-#include <dans/types.hpp>
+#include "dans/dans-core/types.hpp"
 // StdLib
 #include <filesystem>
 #include <vector>
@@ -25,6 +25,7 @@ struct GlyphMetrics
     f32 offset_x{};
     f32 offset_y{};
     f32 advance{};
+    u32 _pad_{};
 };
 
 struct FontMetrics

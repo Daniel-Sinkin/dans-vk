@@ -1,6 +1,7 @@
 #pragma once
 
-#include "dans/vk/geometry.hpp"
+#include "dans/camera/camera.hpp"
+#include "dans/geom/geometry.hpp"
 #include "dans/vk/types.hpp"
 
 #include <limits>
@@ -9,6 +10,15 @@
 
 namespace dans::vk
 {
+using dans::camera::Camera;
+using dans::geom::Aabb;
+using dans::geom::Capsule;
+using dans::geom::Obb;
+using dans::geom::Ray;
+using dans::geom::RayHit;
+using dans::geom::Segment;
+using dans::geom::Sphere;
+
 using Layer = u32;
 using LayerMask = u32;
 

@@ -12,7 +12,7 @@ Completion:
 
 ---
 If:
-  PathMatch: external/.*
+  PathMatch: vendor/.*
 
 Index:
   Background: Skip

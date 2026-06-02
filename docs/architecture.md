@@ -74,9 +74,9 @@ The built-in pass helpers then map closely to the raster frame:
 6. `end_frame()` ends/submits the command buffer, writes pending screenshots,
    presents the swapchain image, and updates runtime stats.
 
-`Runtime::run_prototype(app)` still exists as a thin baby-mode wrapper around
-that protocol for quick CPU-heavy MVPs, but full apps in `app/` use the explicit
-loop directly.
+`Runtime::run_prototype(app)` wraps that protocol for quick MVPs that only need
+`setup`/`update`/`draw_ui`/`shutdown` hooks; `dans_vk_basic_app` uses it. Apps
+that need to interleave their own Vulkan work drive the explicit loop directly.
 
 ## Current Shader Interface
 
@@ -127,39 +127,40 @@ loop directly.
 
 ## Repo Layout
 
-- `dans/vk/` is the framework/library: public headers, implementation files, and
-  built-in shaders live together there.
+- `dans/` holds the libraries the framework is split into. The lower-level pieces
+  are usable without Vulkan:
+  - `dans/dans-core/` and `dans/dans-util/`: shared types, development markers,
+    and small utilities (string, chrono, env, random, stats, ...).
+  - `dans/linalg/`, `dans/gfx/`, `dans/geom/`, `dans/camera/`, `dans/mesh/`,
+    `dans/image/`, `dans/mesh_io/`, `dans/font/`: CPU-side math, color,
+    geometry/intersection, orbit camera, mesh generation, image and glTF/GLB IO,
+    and font baking.
+  - `dans/vk/`: the Vulkan runtime, the `DrawList` core, built-in shaders, and
+    the optional `picker`/`viz`/`manipulator` plugins.
 - `app/` contains full app users of the framework.
-- `app/pba/` is an app-owned headless physics library used by the PBA user. It
-  is intentionally not a framework scene or simulation module.
 - `tests/` contains executable test harnesses.
-- `external/` contains vendored dependencies.
+- `vendor/` contains vendored third-party dependencies.
 - `docs/` and `scripts/` support research and validation.
 
 ## Current App Users
 
-- `dans_vk_basic_app` is the small interactive material/light/picker playground.
-- `dans_vk_vectorfield_app` is the vector-field visualization user that matures
-  `dans::vk::viz` without making vector fields part of the runtime core.
-- `dans_vk_dfsph_app` is a fixed-data DFSPH playback user. It loads the vendored
-  small-dambreak VTK history from `assets/dfsph/.../vtk`, renders particles as
-  mesh draws, can preload decoded CPU surface meshes for the mesh view, and uses
-  `dans::vk::viz` for velocity arrows and bounds markers. It does not vendor
-  SPlisHSPlasH or generate scenes on demand.
-- `dans_vk_pba_app` is a realtime rigid-body visualization user. Space toggles
-  simulation pause while camera controls continue to work. Its pyramid physics
-  is an app-side MVP AABB solver with force accumulators, a small force set,
-  grabbed-body handling, and sweep-and-prune broadphase stats. Speed coloring
-  and velocity arrows are routed through `dans::vk::viz`; selection uses
-  `dans::vk::picker`, and object manipulation uses the callback-based
-  `dans::vk::Manipulator` plugin.
+- `dans_vk_basic_app` (`app/main.cpp`) is the small interactive playground: a
+  floor, cube, and sphere lit by a directional and a radial light, axis debug
+  arrows through `frame.draw.debug_arrow`, and screen-space text. It is the
+  reference example for `setup`/`update` against `Runtime::run_prototype`.
+
+The earlier DFSPH, PBA, vector-field, and 2D-shape app users were split out of
+this repository when the framework was broken into the libraries above; the
+visualization grammar they exercised survives as the `dans::vk::viz` plugin.
 
 ## Asset Loading
 
-`dans::vk::assets` currently contains a small CPU-side glTF/GLB mesh loader for the
-framework's own visualization needs. It supports triangle primitives with
+`dans::mesh_io` contains a small CPU-side glTF/GLB mesh loader (`load_gltf_mesh`)
+for the framework's own visualization needs. It supports triangle primitives with
 positions, normals, texcoords, indices, embedded data URIs, external buffers, and
-GLB BIN chunks. It can generate smooth normals when a test mesh omits them.
+GLB BIN chunks. It can generate smooth normals when a mesh omits them.
+`dans::mesh_io::write_gltf_scene` writes meshes, materials, and images back out as
+a glTF + `.bin` scene.
 
 This is not yet a full asset system. It does not try to own scene hierarchy,
 animations, material graphs, skinning, or arbitrary glTF extensions. GLB unknown
@@ -300,5 +301,4 @@ viz::draw_cross_marker(frame.draw, {
 - Instanced mesh buckets for repeated cube/sphere visualization.
 - A render-target object-id picking path for dense scenes where CPU
   sphere/AABB candidates are not enough.
-- More debug primitives: box, basis triad, text labels.
-- glTF mesh loading, likely from the SPH viewer once this base runtime is stable.
+- More debug primitives: box and basis triad.

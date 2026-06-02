@@ -1,8 +1,8 @@
 # Third-Party Notices
 
-'dans-vk' vendors third-party code directly under 'external/' so the framework
-can be consumed from a single fixed Git commit. Exact upstream URLs, tags, and
-commits are recorded in 'external/versions.md'.
+'dans-vk' keeps third-party code under 'vendor/'. That directory is gitignored
+rather than committed, so the exact upstream URLs, tags, and commits in
+'vendor/versions.md' (and the table below) are what define the expected tree.
 
 The vendored trees are intentionally shortened copies. The removed material is
 limited to non-runtime material such as tests, examples, generated docs, CI
@@ -16,14 +16,13 @@ vendored. They are toolchain/system dependencies.
 
 | Dependency | Location | Upstream pin | License notice |
 | --- | --- | --- | --- |
-| Dear ImGui | 'external/imgui' | 'ocornut/imgui' 'docking' commit 'ed9d1e742793f7e4333565f891b4e3821b205f09' | MIT, see 'external/imgui/LICENSE.txt' |
-| SDL | 'external/SDL' | 'libsdl-org/SDL' tag 'release-3.2.30', commit 'f5e5f6588921eed3d7d048ce43d9eb1ff0da0ffc' | zlib-style, see 'external/SDL/LICENSE.txt' |
-| GLM | 'external/glm' | 'g-truc/glm' tag '1.0.3', commit '8d1fd52e5ab5590e2c81768ace50c72bae28f2ed' | MIT or Happy Bunny License, see 'external/glm/copying.txt' |
-| Vulkan Memory Allocator | 'external/vma' | 'GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator' tag 'v3.3.0', commit '1d8f600fd424278486eade7ed3e877c99f0846b1' | MIT, see 'external/vma/LICENSE.txt' |
-| nlohmann/json | 'external/nlohmann' | 'nlohmann/json' tag 'v3.11.3', commit '9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03' | MIT, see 'external/nlohmann/LICENSE.MIT' |
-| stb | 'external/stb' | 'nothings/stb' 'master' commit '31c1ad37456438565541f4919958214b6e762fb4' | Public domain or MIT, see license text at the bottom of each vendored header |
-| Inter font | 'external/fonts' | 'rsms/inter' tag 'v4.1', commit 'e3a3d4c57d5ecc01453a575621882a384c1995a3' | SIL Open Font License 1.1, see 'external/fonts/LICENSE.txt' |
-| cpp-httplib | 'app/viz/external' | 'yhirose/cpp-httplib' tag 'v0.18.0' | MIT, see 'app/viz/external/httplib_LICENSE.txt'. Used by the visualiser app, not by the dans-vk library. |
+| Dear ImGui | 'vendor/imgui' | 'ocornut/imgui' 'docking' commit 'ed9d1e742793f7e4333565f891b4e3821b205f09' | MIT, see 'vendor/imgui/LICENSE.txt' |
+| SDL | 'vendor/SDL' | 'libsdl-org/SDL' tag 'release-3.2.30', commit 'f5e5f6588921eed3d7d048ce43d9eb1ff0da0ffc' | zlib-style, see 'vendor/SDL/LICENSE.txt' |
+| GLM | 'vendor/glm' | 'g-truc/glm' tag '1.0.3', commit '8d1fd52e5ab5590e2c81768ace50c72bae28f2ed' | MIT or Happy Bunny License, see 'vendor/glm/copying.txt' |
+| Vulkan Memory Allocator | 'vendor/vma' | 'GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator' tag 'v3.3.0', commit '1d8f600fd424278486eade7ed3e877c99f0846b1' | MIT, see 'vendor/vma/LICENSE.txt' |
+| nlohmann/json | 'vendor/nlohmann' | 'nlohmann/json' tag 'v3.11.3', commit '9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03' | MIT, see 'vendor/nlohmann/LICENSE.MIT' |
+| stb | 'vendor/stb' | 'nothings/stb' 'master' commit '31c1ad37456438565541f4919958214b6e762fb4' | Public domain or MIT, see license text at the bottom of each vendored header |
+| Inter font | 'vendor/fonts' | 'rsms/inter' tag 'v4.1', commit 'e3a3d4c57d5ecc01453a575621882a384c1995a3' | SIL Open Font License 1.1, see 'vendor/fonts/LICENSE.txt' |
 
 ## Shortened Copies
 

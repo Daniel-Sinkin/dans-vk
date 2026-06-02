@@ -1,13 +1,20 @@
 #include "dans/vk/plugins/picker.hpp"
 
-#include "dans/vk/camera.hpp"
-#include "dans/vk/math.hpp"
+#include "dans/camera/camera.hpp"
+#include "dans/geom/geometry.hpp"
 
 #include <algorithm>
 #include <cmath>
 
 namespace dans::vk
 {
+using dans::camera::make_camera_ray;
+using dans::geom::hit_aabb;
+using dans::geom::hit_capsule;
+using dans::geom::hit_obb;
+using dans::geom::hit_sphere;
+using dans::geom::normalize_or;
+
 namespace
 {
 struct ScreenPoint

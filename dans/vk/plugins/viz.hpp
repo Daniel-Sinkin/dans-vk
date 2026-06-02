@@ -1,8 +1,8 @@
 #pragma once
 
-#include "dans/vk/camera.hpp"
+#include "dans/camera/camera.hpp"
 #include "dans/vk/debug_draw.hpp"
-#include "dans/vk/geometry.hpp"
+#include "dans/geom/geometry.hpp"
 #include "dans/vk/types.hpp"
 
 #include <algorithm>
@@ -12,6 +12,9 @@
 
 namespace dans::vk::viz
 {
+using dans::camera::Camera;
+using dans::geom::Aabb;
+
 enum class ColorPreset : u8
 {
     grayscale = 0,

@@ -1,5 +1,5 @@
-#include "dans/vk/math.hpp"
-#include "dans/vk/mesh.hpp"
+#include "dans/geom/geometry.hpp"
+#include "dans/mesh/mesh.hpp"
 #include "dans/vk/plugins/viz.hpp"
 #include "dans/vk/runtime.hpp"
 #include "dans/vk/types.hpp"
@@ -18,9 +18,9 @@ class BasicApp
   public:
     auto setup(dans::vk::Runtime& runtime) -> void
     {
-        floor_ = runtime.upload_mesh(dans::vk::make_quad(8.0f, dans::vk::Color::white));
-        cube_ = runtime.upload_mesh(dans::vk::make_cube(1.0f, dans::vk::Color::white));
-        sphere_ = runtime.upload_mesh(dans::vk::make_uv_sphere({.radius = 1.0f}));
+        floor_ = runtime.upload_mesh(dans::mesh::make_quad(8.0f, dans::vk::Color::white));
+        cube_ = runtime.upload_mesh(dans::mesh::make_cube(1.0f, dans::vk::Color::white));
+        sphere_ = runtime.upload_mesh(dans::mesh::make_uv_sphere({.radius = 1.0f}));
         runtime.camera({
             .pivot = 0.6f * dans::vk::k_axis_z,
             .distance = 6.0f,
@@ -58,16 +58,20 @@ class BasicApp
 
         frame.draw.draw_mesh({
             .mesh = floor_,
-            .material = {.base_color = dans::vk::Color{0.30f, 0.34f, 0.31f, 1.0f}, .roughness = 0.9f},
+            .material =
+                {.base_color = dans::vk::Color{0.30f, 0.34f, 0.31f, 1.0f}, .roughness = 0.9f},
             .mask = {.shadow_producer = false},
         });
         frame.draw.draw_mesh({
             .mesh = cube_,
-            .transform = {
-                .translation = {-1.1f, 0.0f, 0.65f},
-                .rotation = glm::angleAxis(elapsed_seconds_ * 0.65f, dans::vk::k_axis_z),
+            .transform =
+                {
+                    .translation = {-1.1f, 0.0f, 0.65f},
+                    .rotation = glm::angleAxis(elapsed_seconds_ * 0.65f, dans::vk::k_axis_z),
+                },
+            .material = {
+                .base_color = dans::vk::Color{0.92f, 0.46f, 0.22f, 1.0f}, .roughness = 0.52f
             },
-            .material = {.base_color = dans::vk::Color{0.92f, 0.46f, 0.22f, 1.0f}, .roughness = 0.52f},
         });
         frame.draw.draw_mesh({
             .mesh = sphere_,
@@ -79,17 +83,23 @@ class BasicApp
             },
         });
 
-        frame.draw.debug_arrow({.origin = {}, .vector = dans::vk::k_axis_x, .color = dans::vk::Color::red});
-        frame.draw.debug_arrow({.origin = {}, .vector = dans::vk::k_axis_y, .color = dans::vk::Color::green});
-        frame.draw.debug_arrow({.origin = {}, .vector = dans::vk::k_axis_z, .color = dans::vk::Color::blue});
+        frame.draw.debug_arrow(
+            {.origin = {}, .vector = dans::vk::k_axis_x, .color = dans::vk::Color::red}
+        );
+        frame.draw.debug_arrow(
+            {.origin = {}, .vector = dans::vk::k_axis_y, .color = dans::vk::Color::green}
+        );
+        frame.draw.debug_arrow(
+            {.origin = {}, .vector = dans::vk::k_axis_z, .color = dans::vk::Color::blue}
+        );
 
         frame.draw.text_screen({
             .position = {24.0f, 48.0f},
             .text = "dans_vk text demo",
             .color = dans::vk::Color::white,
         });
-        const auto seconds_line
-            = std::format("t = {:.2f}s", static_cast<dans::f64>(elapsed_seconds_));
+        const auto seconds_line =
+            std::format("t = {:.2f}s", static_cast<dans::f64>(elapsed_seconds_));
         frame.draw.text_screen({
             .position = {24.0f, 84.0f},
             .text = seconds_line,

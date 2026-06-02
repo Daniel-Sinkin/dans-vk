@@ -1,7 +1,7 @@
 #pragma once
 
-#include "dans/vk/camera.hpp"
-#include "dans/vk/mesh.hpp"
+#include "dans/camera/camera.hpp"
+#include "dans/mesh/mesh.hpp"
 #include "dans/vk/types.hpp"
 
 #include <functional>
@@ -11,6 +11,9 @@
 
 namespace dans::vk
 {
+using dans::camera::Camera;
+using dans::mesh::Transform;
+
 enum class ManipulatorMode : u8
 {
     none = 0,

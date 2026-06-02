@@ -1,10 +1,10 @@
 #pragma once
 
-#include "dans/vk/camera.hpp"
+#include "dans/camera/camera.hpp"
 #include "dans/vk/debug_draw.hpp"
 #include "dans/font/font_atlas.hpp"
 #include "dans/vk/drawlist.hpp"
-#include "dans/vk/mesh.hpp"
+#include "dans/mesh/mesh.hpp"
 #include "dans/vk/shape_draw.hpp"
 #include "dans/vk/text_draw.hpp"
 #include "dans/vk/types.hpp"
@@ -20,6 +20,12 @@
 
 namespace dans::vk
 {
+using dans::camera::Camera;
+using dans::camera::CameraConfig;
+using dans::mesh::MeshData;
+using dans::mesh::MeshVertexFormat;
+using dans::mesh::PositionNormalMeshData;
+using dans::mesh::QuantizedPositionNormalMeshData;
 
 struct DescriptorIndexingSupport
 {
