@@ -1,8 +1,8 @@
 # Third-Party Notices
 
-'dans-vk' keeps third-party code under 'vendor/'. That directory is gitignored
-rather than committed, so the exact upstream URLs, tags, and commits in
-'vendor/versions.md' (and the table below) are what define the expected tree.
+'dans-vk' vendors third-party code directly under 'vendor/' so the framework
+can be consumed from a single fixed Git commit. Exact upstream URLs, tags, and
+commits are recorded in 'vendor/versions.md'.
 
 The vendored trees are intentionally shortened copies. The removed material is
 limited to non-runtime material such as tests, examples, generated docs, CI

@@ -73,9 +73,6 @@ Testing/
 run/
 imgui.ini
 
-# Vendored third-party dependencies; present locally, not committed.
-vendor/
-
 # Local private assets and experiments; intentionally not redistributed.
 local/
 assets/
