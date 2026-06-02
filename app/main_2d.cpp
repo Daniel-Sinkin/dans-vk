@@ -60,10 +60,6 @@ using dans::vk::FrameContext;
 using dans::vk::Runtime;
 using dans::vk::with_alpha;
 
-// ============================================================================
-// Rendering constants
-// ============================================================================
-
 constexpr f32 k_node_min_radius = 24.0f;
 constexpr f32 k_node_radius_step = 3.5f;
 constexpr f32 k_node_max_radius = 60.0f;
@@ -94,10 +90,6 @@ constexpr f32 k_drag_threshold_px = 4.0f;
     }
     return std::min(k_node_max_radius, k_node_min_radius + static_cast<f32>(rank) * k_node_radius_step);
 }
-
-// ============================================================================
-// Lookup helpers
-// ============================================================================
 
 [[nodiscard]] auto find_tensor(Frame& f, u32 id) -> Tensor*
 {
@@ -151,10 +143,6 @@ constexpr f32 k_drag_threshold_px = 4.0f;
     }
     return std::nullopt;
 }
-
-// ============================================================================
-// Geometry helpers
-// ============================================================================
 
 [[nodiscard]] auto length2(Vec2 v) noexcept -> f32
 {
@@ -299,10 +287,6 @@ struct LegAnchor
         omt * omt * a.y + 2.0f * omt * t * b.y + t * t * c.y,
     };
 }
-
-// ============================================================================
-// Visualizer
-// ============================================================================
 
 enum class MouseAction : u8
 {

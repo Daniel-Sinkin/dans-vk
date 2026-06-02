@@ -1,0 +1,4 @@
+# dans-util project-local development config
+marker_tidy = true
+build_dir = build
+marker_tidy_translation_units = app/main.cpp src/chrono.cpp src/dev.cpp src/env.cpp src/fmt.cpp src/random.cpp src/str.cpp

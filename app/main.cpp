@@ -36,7 +36,7 @@ class BasicApp
 #endif
     }
 
-    auto update(dans::vk::FrameContext& frame, dans::vk::f32 dt_seconds) -> void
+    auto update(dans::vk::FrameContext& frame, dans::f32 dt_seconds) -> void
     {
         elapsed_seconds_ += dt_seconds;
         frame.draw.set_environment({
@@ -89,7 +89,7 @@ class BasicApp
             .color = dans::vk::Color::white,
         });
         const auto seconds_line
-            = std::format("t = {:.2f}s", static_cast<dans::vk::f64>(elapsed_seconds_));
+            = std::format("t = {:.2f}s", static_cast<dans::f64>(elapsed_seconds_));
         frame.draw.text_screen({
             .position = {24.0f, 84.0f},
             .text = seconds_line,
@@ -108,10 +108,10 @@ class BasicApp
     dans::vk::MeshHandle floor_{};
     dans::vk::MeshHandle cube_{};
     dans::vk::MeshHandle sphere_{};
-    dans::vk::f32 elapsed_seconds_{};
+    dans::f32 elapsed_seconds_{};
 };
 
-auto parse_u32(const char* text, dans::vk::u32 fallback) noexcept -> dans::vk::u32
+auto parse_u32(const char* text, dans::u32 fallback) noexcept -> dans::u32
 {
     char* end = nullptr;
     const auto value = std::strtoul(text, &end, 10);
@@ -119,7 +119,7 @@ auto parse_u32(const char* text, dans::vk::u32 fallback) noexcept -> dans::vk::u
     {
         return fallback;
     }
-    return static_cast<dans::vk::u32>(value);
+    return static_cast<dans::u32>(value);
 }
 
 auto print_usage(const char* executable) -> void

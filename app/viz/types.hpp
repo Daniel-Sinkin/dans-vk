@@ -22,13 +22,13 @@ namespace viz
 
 using dans::vk::Color;
 using dans::vk::Vec2;
-using dans::vk::f32;
-using dans::vk::f64;
-using dans::vk::i32;
-using dans::vk::i64;
-using dans::vk::u32;
-using dans::vk::u8;
-using dans::vk::usize;
+using dans::f32;
+using dans::f64;
+using dans::i32;
+using dans::i64;
+using dans::u32;
+using dans::u8;
+using dans::usize;
 
 // Per-leg metadata that round-trips through the JSON envelope.
 // 'id' is the index identifier produced by the simulator; bonds are

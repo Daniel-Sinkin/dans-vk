@@ -1,0 +1,12 @@
+CompileFlags:
+  CompilationDatabase: build
+
+Index:
+  Background: Build
+
+Completion:
+  AllScopes: No
+
+Diagnostics:
+  MissingIncludes: Strict
+  UnusedIncludes: Strict

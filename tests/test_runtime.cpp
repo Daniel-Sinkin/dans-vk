@@ -13,7 +13,7 @@ auto g_failures = 0;
 struct PlainApp
 {
     auto setup(dans::vk::Runtime& runtime) -> void;
-    auto update(dans::vk::FrameContext& frame, dans::vk::f32 dt_seconds) -> void;
+    auto update(dans::vk::FrameContext& frame, dans::f32 dt_seconds) -> void;
     auto draw_ui(dans::vk::FrameContext& frame) -> void;
     auto shutdown(dans::vk::Runtime& runtime) -> void;
 };
@@ -39,8 +39,8 @@ static_assert(!dans::vk::detail::has_runtime_hook<NoHooksApp>);
 static_assert(has_prototype_runner<PlainApp>);
 static_assert(has_prototype_runner<SetupOnlyApp>);
 static_assert(!std::is_polymorphic_v<PlainApp>);
-static_assert(sizeof(dans::vk::MeshDebugMode) == sizeof(dans::vk::u8));
-static_assert(sizeof(dans::vk::LightType) == sizeof(dans::vk::u8));
+static_assert(sizeof(dans::vk::MeshDebugMode) == sizeof(dans::u8));
+static_assert(sizeof(dans::vk::LightType) == sizeof(dans::u8));
 
 auto check(bool condition, const std::string_view message) -> void
 {
@@ -136,7 +136,7 @@ auto test_draw_list() -> void
 
     draw.draw_mesh({
         .mesh = dans::vk::MeshHandle{.id = 4u},
-        .object_id = {.value = std::numeric_limits<dans::vk::u32>::max()},
+        .object_id = {.value = std::numeric_limits<dans::u32>::max()},
     });
     check(
         !draw.mesh_commands().back().object_id.valid(), "max u32 object id is reserved as invalid"

@@ -177,7 +177,7 @@ class MyApp final
 {
   public:
     auto setup(dans::vk::Runtime& runtime) -> void;
-    auto update(dans::vk::FrameContext& frame, dans::vk::f32 dt_seconds) -> void;
+    auto update(dans::vk::FrameContext& frame, dans::f32 dt_seconds) -> void;
     auto draw_ui(dans::vk::FrameContext& frame) -> void;
     auto shutdown(dans::vk::Runtime& runtime) -> void;
 };

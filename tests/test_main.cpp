@@ -38,7 +38,7 @@ auto check(bool condition, const std::string_view message) -> void
     }
 }
 
-auto near(const dans::vk::f32 a, const dans::vk::f32 b, const dans::vk::f32 eps = 1.0e-5f) -> bool
+auto near(const dans::f32 a, const dans::f32 b, const dans::f32 eps = 1.0e-5f) -> bool
 {
     return std::abs(a - b) <= eps;
 }
@@ -54,19 +54,19 @@ auto finite_vec2(const dans::vk::Vec2 value) -> bool
 }
 
 template <typename T>
-auto append_pod(std::vector<dans::vk::u8>& bytes, T value) -> void
+auto append_pod(std::vector<dans::u8>& bytes, T value) -> void
 {
     const auto offset = bytes.size();
     bytes.resize(offset + sizeof(T));
     std::memcpy(bytes.data() + offset, &value, sizeof(T));
 }
 
-auto append_bytes(std::vector<dans::vk::u8>& bytes, std::span<const dans::vk::u8> data) -> void
+auto append_bytes(std::vector<dans::u8>& bytes, std::span<const dans::u8> data) -> void
 {
     bytes.insert(bytes.end(), data.begin(), data.end());
 }
 
-auto pad_to_glb_alignment(std::vector<dans::vk::u8>& bytes, dans::vk::u8 pad) -> void
+auto pad_to_glb_alignment(std::vector<dans::u8>& bytes, dans::u8 pad) -> void
 {
     while ((bytes.size() % 4zu) != 0zu)
     {
@@ -74,16 +74,16 @@ auto pad_to_glb_alignment(std::vector<dans::vk::u8>& bytes, dans::vk::u8 pad) ->
     }
 }
 
-[[nodiscard]] auto make_triangle_glb_with_unknown_chunk() -> std::vector<dans::vk::u8>
+[[nodiscard]] auto make_triangle_glb_with_unknown_chunk() -> std::vector<dans::u8>
 {
-    constexpr dans::vk::u32 k_glb_magic{0x46546c67u};
-    constexpr dans::vk::u32 k_glb_version_2{2u};
-    constexpr dans::vk::u32 k_glb_json_chunk_type{0x4e4f534au};
-    constexpr dans::vk::u32 k_glb_binary_chunk_type{0x004e4942u};
-    constexpr dans::vk::u32 k_unknown_chunk_type{0x54534554u};
-    constexpr dans::vk::usize k_binary_byte_length{102zu};
+    constexpr dans::u32 k_glb_magic{0x46546c67u};
+    constexpr dans::u32 k_glb_version_2{2u};
+    constexpr dans::u32 k_glb_json_chunk_type{0x4e4f534au};
+    constexpr dans::u32 k_glb_binary_chunk_type{0x004e4942u};
+    constexpr dans::u32 k_unknown_chunk_type{0x54534554u};
+    constexpr dans::usize k_binary_byte_length{102zu};
 
-    std::vector<dans::vk::u8> bin{};
+    std::vector<dans::u8> bin{};
     bin.reserve(k_binary_byte_length);
     const auto append_vec3 = [&](dans::vk::Vec3 value) -> void
     {
@@ -105,50 +105,50 @@ auto pad_to_glb_alignment(std::vector<dans::vk::u8>& bytes, dans::vk::u8 pad) ->
     append_vec2({0.0f, 0.0f});
     append_vec2({1.0f, 0.0f});
     append_vec2({0.0f, 1.0f});
-    append_pod(bin, dans::vk::u16{0u});
-    append_pod(bin, dans::vk::u16{1u});
-    append_pod(bin, dans::vk::u16{2u});
+    append_pod(bin, dans::u16{0u});
+    append_pod(bin, dans::u16{1u});
+    append_pod(bin, dans::u16{2u});
     check(bin.size() == k_binary_byte_length, "glb fixture binary layout");
-    pad_to_glb_alignment(bin, dans::vk::u8{0u});
+    pad_to_glb_alignment(bin, dans::u8{0u});
 
-    std::vector<dans::vk::u8> json_chunk{};
+    std::vector<dans::u8> json_chunk{};
     constexpr std::string_view json_text{
         R"({"asset":{"version":"2.0"},"buffers":[{"byteLength":102}],"bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":36},{"buffer":0,"byteOffset":36,"byteLength":36},{"buffer":0,"byteOffset":72,"byteLength":24},{"buffer":0,"byteOffset":96,"byteLength":6}],"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"},{"bufferView":1,"componentType":5126,"count":3,"type":"VEC3"},{"bufferView":2,"componentType":5126,"count":3,"type":"VEC2"},{"bufferView":3,"componentType":5123,"count":3,"type":"SCALAR"}],"meshes":[{"primitives":[{"attributes":{"POSITION":0,"NORMAL":1,"TEXCOORD_0":2},"indices":3,"mode":4}]}]})"
     };
     json_chunk.assign(json_text.begin(), json_text.end());
-    pad_to_glb_alignment(json_chunk, dans::vk::u8{' '});
+    pad_to_glb_alignment(json_chunk, dans::u8{' '});
 
-    std::vector<dans::vk::u8> unknown_chunk{7u, 5u, 3u, 1u};
-    pad_to_glb_alignment(unknown_chunk, dans::vk::u8{0u});
+    std::vector<dans::u8> unknown_chunk{7u, 5u, 3u, 1u};
+    pad_to_glb_alignment(unknown_chunk, dans::u8{0u});
 
-    constexpr dans::vk::usize k_glb_header_bytes{12zu};
-    constexpr dans::vk::usize k_glb_chunk_header_bytes{8zu};
+    constexpr dans::usize k_glb_header_bytes{12zu};
+    constexpr dans::usize k_glb_chunk_header_bytes{8zu};
     const auto total_length = k_glb_header_bytes + 3zu * k_glb_chunk_header_bytes
                               + json_chunk.size() + bin.size() + unknown_chunk.size();
 
-    std::vector<dans::vk::u8> glb{};
+    std::vector<dans::u8> glb{};
     append_pod(glb, k_glb_magic);
     append_pod(glb, k_glb_version_2);
-    append_pod(glb, static_cast<dans::vk::u32>(total_length));
-    append_pod(glb, static_cast<dans::vk::u32>(json_chunk.size()));
+    append_pod(glb, static_cast<dans::u32>(total_length));
+    append_pod(glb, static_cast<dans::u32>(json_chunk.size()));
     append_pod(glb, k_glb_json_chunk_type);
     append_bytes(glb, json_chunk);
-    append_pod(glb, static_cast<dans::vk::u32>(bin.size()));
+    append_pod(glb, static_cast<dans::u32>(bin.size()));
     append_pod(glb, k_glb_binary_chunk_type);
     append_bytes(glb, bin);
-    append_pod(glb, static_cast<dans::vk::u32>(unknown_chunk.size()));
+    append_pod(glb, static_cast<dans::u32>(unknown_chunk.size()));
     append_pod(glb, k_unknown_chunk_type);
     append_bytes(glb, unknown_chunk);
     return glb;
 }
 
-auto replace_first_glb_chunk_type(std::vector<dans::vk::u8>& glb, dans::vk::u32 chunk_type) -> void
+auto replace_first_glb_chunk_type(std::vector<dans::u8>& glb, dans::u32 chunk_type) -> void
 {
     constexpr auto k_glb_first_chunk_type_offset = 16zu;
     std::memcpy(glb.data() + k_glb_first_chunk_type_offset, &chunk_type, sizeof(chunk_type));
 }
 
-auto set_glb_container_length(std::vector<dans::vk::u8>& glb, dans::vk::u32 byte_count) -> void
+auto set_glb_container_length(std::vector<dans::u8>& glb, dans::u32 byte_count) -> void
 {
     constexpr auto k_glb_length_offset = 8zu;
     std::memcpy(glb.data() + k_glb_length_offset, &byte_count, sizeof(byte_count));
@@ -156,8 +156,8 @@ auto set_glb_container_length(std::vector<dans::vk::u8>& glb, dans::vk::u32 byte
 
 struct FakeDrawSink
 {
-    dans::vk::usize line_count{};
-    dans::vk::usize arrow_count{};
+    dans::usize line_count{};
+    dans::usize arrow_count{};
     dans::vk::Color first_line_color{};
     dans::vk::Color last_line_color{};
     dans::vk::Vec3 last_arrow_origin{};
@@ -187,8 +187,8 @@ template <typename T>
 concept Addable = requires(T a, T b) { a + b; };
 
 static_assert(!Addable<dans::vk::Color>);
-static_assert(sizeof(dans::vk::ProjectionMode) == sizeof(dans::vk::u8));
-static_assert(sizeof(dans::vk::PickerShapeType) == sizeof(dans::vk::u8));
+static_assert(sizeof(dans::vk::ProjectionMode) == sizeof(dans::u8));
+static_assert(sizeof(dans::vk::PickerShapeType) == sizeof(dans::u8));
 
 auto test_color_types() -> void
 {
@@ -277,9 +277,9 @@ auto test_sphere_mesh() -> void
         }
     );
     const auto expected_vertices =
-        static_cast<dans::vk::usize>(slices + 1u) * static_cast<dans::vk::usize>(stacks + 1u);
+        static_cast<dans::usize>(slices + 1u) * static_cast<dans::usize>(stacks + 1u);
     const auto expected_indices =
-        static_cast<dans::vk::usize>(slices) * static_cast<dans::vk::usize>(stacks) * 6u;
+        static_cast<dans::usize>(slices) * static_cast<dans::usize>(stacks) * 6u;
     check(mesh.vertices.size() == expected_vertices, "sphere vertex count");
     check(mesh.indices.size() == expected_indices, "sphere index count");
     check(dans::vk::has_valid_indices(mesh), "sphere indices are valid");
@@ -434,10 +434,10 @@ auto test_gltf_assets() -> void
 
     {
         auto invalid_glb_bytes = make_triangle_glb_with_unknown_chunk();
-        constexpr dans::vk::u32 k_partial_chunk_header{0x12345678u};
+        constexpr dans::u32 k_partial_chunk_header{0x12345678u};
         append_pod(invalid_glb_bytes, k_partial_chunk_header);
         set_glb_container_length(
-            invalid_glb_bytes, static_cast<dans::vk::u32>(invalid_glb_bytes.size())
+            invalid_glb_bytes, static_cast<dans::u32>(invalid_glb_bytes.size())
         );
         std::ofstream out{glb_path, std::ios::binary};
         out.write(
@@ -471,7 +471,7 @@ auto test_camera_projection() -> void
     check(std::isfinite(projection[0][0]), "projection matrix is finite");
     check(projection[1][1] < 0.0f, "projection matrix uses Vulkan inverted Y");
 
-    camera.set_pitch(glm::half_pi<dans::vk::f32>());
+    camera.set_pitch(glm::half_pi<dans::f32>());
     check(finite_vec3(camera.right()), "camera right vector is finite at vertical pitch");
     check(finite_vec3(camera.up()), "camera up vector is finite at vertical pitch");
 }

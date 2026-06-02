@@ -84,6 +84,10 @@ if(NOT TARGET glm::glm)
   add_subdirectory(external/glm EXCLUDE_FROM_ALL)
 endif()
 
+if(NOT TARGET dans::util)
+  add_subdirectory(external/dans-util EXCLUDE_FROM_ALL)
+endif()
+
 set(DANS_VK_CORE_SOURCES
   dans/vk/assets.cpp
   dans/vk/camera.cpp
@@ -99,7 +103,7 @@ target_include_directories(dans_vk_core PUBLIC
 target_include_directories(dans_vk_core SYSTEM PRIVATE
   external
 )
-target_link_libraries(dans_vk_core PUBLIC glm::glm)
+target_link_libraries(dans_vk_core PUBLIC glm::glm dans::util)
 target_link_libraries(dans_vk_core PRIVATE dans_vk_warnings)
 
 add_library(dans_vk_picker STATIC dans/vk/plugins/picker.cpp)
