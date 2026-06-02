@@ -148,10 +148,7 @@ auto write_png(const std::filesystem::path& path, const GltfImageData& image) ->
     {
         throw std::runtime_error(std::format("invalid glTF image data: {}", image.name));
     }
-    const auto bytes = std::span<const u8>{
-        reinterpret_cast<const u8*>(image.pixels.data()), image.pixels.size() * sizeof(ColorU8)
-    };
-    dans::image::write_rgba8_png(path, image.width, image.height, bytes);
+    dans::image::write_rgba8_png(path, image.width, image.height, image.pixels);
 }
 
 [[nodiscard]] auto

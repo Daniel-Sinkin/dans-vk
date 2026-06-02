@@ -177,7 +177,7 @@ target_include_directories(dans_image PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
 target_include_directories(dans_image SYSTEM PRIVATE vendor/stb)
-target_link_libraries(dans_image PUBLIC dans::core)
+target_link_libraries(dans_image PUBLIC dans::core dans_gfx)
 target_link_libraries(dans_image PRIVATE dans_vk_warnings)
 
 add_library(dans_mesh_io STATIC

@@ -1190,7 +1190,7 @@ auto Runtime::Impl::load_texture(
     const auto loaded = dans::image::load_rgba8(path);
     const auto format = load_config.srgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
     auto texture
-        = create_texture_resource(loaded.rgba.data(), loaded.width, loaded.height, format, 4u);
+        = create_texture_resource(loaded.storage.data(), loaded.width, loaded.height, format, 4u);
 
     const auto index = static_cast<u32>(textures.size());
     try
@@ -1286,13 +1286,16 @@ auto Runtime::Impl::load_hdr_texture(
     {
         throw std::runtime_error(std::format("HDR texture has invalid size: {}", path.string()));
     }
-    for (auto& channel : loaded.rgba)
+    for (auto& pixel : loaded.storage)
     {
-        channel *= load_config.exposure;
+        for (auto& channel : pixel.channels)
+        {
+            channel *= load_config.exposure;
+        }
     }
 
     auto texture = create_texture_resource(
-        loaded.rgba.data(),
+        loaded.storage.data(),
         loaded.width,
         loaded.height,
         VK_FORMAT_R32G32B32A32_SFLOAT,
@@ -4842,8 +4845,8 @@ auto Runtime::Impl::write_capture_png(const SwapchainCapture& capture) -> void
     }
     const auto bgra =
         capture.format == VK_FORMAT_B8G8R8A8_UNORM or capture.format == VK_FORMAT_B8G8R8A8_SRGB;
-    std::vector<u8> rgba(
-        static_cast<usize>(capture.width) * static_cast<usize>(capture.height) * 4zu
+    std::vector<ColorU8> rgba(
+        static_cast<usize>(capture.width) * static_cast<usize>(capture.height)
     );
 
     void* mapped = nullptr;
@@ -4860,11 +4863,14 @@ auto Runtime::Impl::write_capture_png(const SwapchainCapture& capture) -> void
         {
             for (auto x = 0zu; x < capture_width; ++x)
             {
-                const auto i = (y * capture_width + x) * 4zu;
-                rgba[i + 0zu] = bgra ? pixels[i + 2zu] : pixels[i + 0zu];
-                rgba[i + 1zu] = pixels[i + 1zu];
-                rgba[i + 2zu] = bgra ? pixels[i + 0zu] : pixels[i + 2zu];
-                rgba[i + 3zu] = capture.transparent_background ? pixels[i + 3zu] : 255u;
+                const auto pixel_index = y * capture_width + x;
+                const auto i = pixel_index * 4zu;
+                rgba[pixel_index] = ColorU8{
+                    bgra ? pixels[i + 2zu] : pixels[i + 0zu],
+                    pixels[i + 1zu],
+                    bgra ? pixels[i + 0zu] : pixels[i + 2zu],
+                    capture.transparent_background ? pixels[i + 3zu] : u8{255},
+                };
             }
         }
     }

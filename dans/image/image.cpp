@@ -29,8 +29,9 @@ auto load_rgba8(const std::filesystem::path& path) -> Image8
         );
     }
     Image8 image{.width = static_cast<u32>(width), .height = static_cast<u32>(height)};
-    const auto count = static_cast<usize>(width) * static_cast<usize>(height) * 4zu;
-    image.rgba.assign(pixels, pixels + count);
+    const auto count = static_cast<usize>(width) * static_cast<usize>(height);
+    const auto* typed = reinterpret_cast<const ColorU8*>(pixels);
+    image.storage.assign(typed, typed + count);
     stbi_image_free(pixels);
     return image;
 }
@@ -48,18 +49,19 @@ auto load_rgba_f32(const std::filesystem::path& path) -> ImageF
         ));
     }
     ImageF image{.width = static_cast<u32>(width), .height = static_cast<u32>(height)};
-    const auto count = static_cast<usize>(width) * static_cast<usize>(height) * 4zu;
-    image.rgba.assign(pixels, pixels + count);
+    const auto count = static_cast<usize>(width) * static_cast<usize>(height);
+    const auto* typed = reinterpret_cast<const Color*>(pixels);
+    image.storage.assign(typed, typed + count);
     stbi_image_free(pixels);
     return image;
 }
 
 auto write_rgba8_png(
-    const std::filesystem::path& path, u32 width, u32 height, std::span<const u8> rgba
+    const std::filesystem::path& path, u32 width, u32 height, std::span<const ColorU8> pixels
 ) -> void
 {
-    const auto expected = static_cast<usize>(width) * static_cast<usize>(height) * 4zu;
-    if (width == 0u or height == 0u or rgba.size() != expected)
+    const auto expected = static_cast<usize>(width) * static_cast<usize>(height);
+    if (width == 0u or height == 0u or pixels.size() != expected)
     {
         throw std::runtime_error(
             std::format("dans::image: invalid RGBA8 image for {}", path.string())
@@ -70,7 +72,7 @@ auto write_rgba8_png(
         static_cast<int>(width),
         static_cast<int>(height),
         4,
-        rgba.data(),
+        pixels.data(),
         static_cast<int>(width * 4u)
     );
     if (result == 0)
