@@ -141,7 +141,7 @@ auto Manipulator::begin(const ManipulatorConfig& cfg, ManipulatorMode mode) -> v
     active_ = true;
     mode_ = mode;
     axis_ = ManipulatorAxis::none;
-    start_mouse_px_ = cfg.input.mouse_px;
+    start_mouse_logical_px_ = cfg.input.mouse_logical_px;
     apply(cfg);
 }
 
@@ -152,8 +152,8 @@ auto Manipulator::apply(const ManipulatorConfig& cfg) -> void
         return;
     }
 
-    const auto mouse_delta = cfg.input.mouse_px - start_mouse_px_;
-    const auto viewport_y = std::max(1.0f, cfg.input.viewport_px.y);
+    const auto mouse_delta = cfg.input.mouse_logical_px - start_mouse_logical_px_;
+    const auto viewport_y = std::max(1.0f, cfg.input.viewport_logical_px.y);
     const auto units_per_px =
         cfg.input.camera.units_per_pixel_y(viewport_y) * std::max(0.0f, cfg.translate_sensitivity);
     const auto world_delta = constrained_delta(

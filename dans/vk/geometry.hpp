@@ -54,7 +54,7 @@ struct RayHit
 };
 
 // clang-format off
-[[nodiscard]] auto make_camera_ray(const Camera&, Vec2 cursor_px, Vec2 viewport_px) noexcept -> Ray;
+[[nodiscard]] auto make_camera_ray(const Camera&, Vec2 cursor_logical_px, Vec2 viewport_logical_px) noexcept -> Ray;
 
 [[nodiscard]] auto intersect_sphere(const Ray&, const Sphere&) noexcept    -> std::optional<f32>;
 [[nodiscard]] auto intersect_aabb(const Ray&, const Aabb&) noexcept        -> std::optional<f32>;

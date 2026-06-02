@@ -251,11 +251,10 @@ picker.add_obb({
 
 const auto hit = picker.click({
     .camera = frame.camera,
-    .mouse_px = frame.input.left_click.position_px,
-    .viewport_px = {
-        static_cast<dans::vk::f32>(frame.extent.width),
-        static_cast<dans::vk::f32>(frame.extent.height),
-    },
+    .mouse_logical_px = frame.input.left_click.position_logical_px,
+    // viewport must share the cursor's space: logical pixels, not frame.extent
+    // (which is physical framebuffer pixels and would be off by dpi on HiDPI).
+    .viewport_logical_px = runtime.logical_extent(),
 });
 ```
 

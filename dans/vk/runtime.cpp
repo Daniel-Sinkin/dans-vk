@@ -1308,7 +1308,7 @@ struct Runtime::Impl
     [[nodiscard]] auto compute_dpi_scale() const noexcept -> f32;
     auto draw_runtime_ui() -> void;
     auto handle_event(const SDL_Event&) -> void;
-    [[nodiscard]] auto framebuffer_mouse_position(f32 window_x, f32 window_y) const -> Vec2;
+    [[nodiscard]] auto logical_mouse_position(f32 window_x, f32 window_y) const -> Vec2;
     [[nodiscard]] auto current_modifiers() const noexcept -> KeyboardModifiers;
     auto reset_input_frame() -> void;
     auto rebuild_swapchain_if_needed() -> void;
@@ -4966,7 +4966,7 @@ auto Runtime::Impl::handle_event(const SDL_Event& event) -> void
     }
     if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN and !io.WantCaptureMouse)
     {
-        input.mouse_px = framebuffer_mouse_position(event.button.x, event.button.y);
+        input.mouse_logical_px = logical_mouse_position(event.button.x, event.button.y);
         if (event.button.button == SDL_BUTTON_RIGHT)
         {
             if (is_2d_mode())
@@ -4975,7 +4975,7 @@ auto Runtime::Impl::handle_event(const SDL_Event& event) -> void
                 // a quick RMB tap becomes a right-click event and a drag becomes
                 // a pan. Threshold = 4 px.
                 rmb_pending_click = true;
-                rmb_press_px = input.mouse_px;
+                rmb_press_px = input.mouse_logical_px;
                 input.right_button_down = true;
             }
             else
@@ -4992,7 +4992,7 @@ auto Runtime::Impl::handle_event(const SDL_Event& event) -> void
         {
             input.left_click = MouseClick{
                 .occurred = true,
-                .position_px = input.mouse_px,
+                .position_logical_px = input.mouse_logical_px,
                 .click_count = static_cast<u8>(event.button.clicks),
                 .modifiers = current_modifiers(),
             };
@@ -5001,7 +5001,7 @@ auto Runtime::Impl::handle_event(const SDL_Event& event) -> void
     }
     if (event.type == SDL_EVENT_MOUSE_BUTTON_UP)
     {
-        input.mouse_px = framebuffer_mouse_position(event.button.x, event.button.y);
+        input.mouse_logical_px = logical_mouse_position(event.button.x, event.button.y);
         if (event.button.button == SDL_BUTTON_RIGHT)
         {
             if (is_2d_mode())
@@ -5010,7 +5010,7 @@ auto Runtime::Impl::handle_event(const SDL_Event& event) -> void
                 {
                     input.right_click = MouseClick{
                         .occurred = true,
-                        .position_px = input.mouse_px,
+                        .position_logical_px = input.mouse_logical_px,
                         .click_count = static_cast<u8>(event.button.clicks),
                         .modifiers = current_modifiers(),
                     };
@@ -5035,7 +5035,7 @@ auto Runtime::Impl::handle_event(const SDL_Event& event) -> void
     }
     if (event.type == SDL_EVENT_MOUSE_MOTION and !io.WantCaptureMouse)
     {
-        input.mouse_px = framebuffer_mouse_position(event.motion.x, event.motion.y);
+        input.mouse_logical_px = logical_mouse_position(event.motion.x, event.motion.y);
         auto framebuffer_width = 1;
         auto framebuffer_height = 1;
         SDL_GetWindowSizeInPixels(window, &framebuffer_width, &framebuffer_height);
@@ -5043,8 +5043,8 @@ auto Runtime::Impl::handle_event(const SDL_Event& event) -> void
         {
             if (rmb_pending_click)
             {
-                const auto dx = input.mouse_px.x - rmb_press_px.x;
-                const auto dy = input.mouse_px.y - rmb_press_px.y;
+                const auto dx = input.mouse_logical_px.x - rmb_press_px.x;
+                const auto dy = input.mouse_logical_px.y - rmb_press_px.y;
                 if (std::abs(dx) > 4.0f or std::abs(dy) > 4.0f)
                 {
                     rmb_pending_click = false;
@@ -5084,7 +5084,7 @@ auto Runtime::Impl::handle_event(const SDL_Event& event) -> void
         if (is_2d_mode())
         {
             const auto extent = logical_window_extent();
-            const auto cursor_px = input.mouse_px;
+            const auto cursor_px = input.mouse_logical_px;
             const Vec2 center_px{0.5f * extent.x, 0.5f * extent.y};
             const auto zoom_factor = std::exp(-event.wheel.y * 0.12f);
             const auto new_zoom = std::clamp(camera_2d_zoom * zoom_factor, 0.001f, 1000.0f);
@@ -5103,9 +5103,9 @@ auto Runtime::Impl::handle_event(const SDL_Event& event) -> void
     }
 }
 
-auto Runtime::Impl::framebuffer_mouse_position(f32 window_x, f32 window_y) const -> Vec2
+auto Runtime::Impl::logical_mouse_position(f32 window_x, f32 window_y) const -> Vec2
 {
-    // mouse_px is in logical pixels so all screen-space coordinates (UI text,
+    // mouse_logical_px is in logical pixels so all screen-space coordinates (UI text,
     // shapes, radial menu, mouse-to-world conversion in 2D mode) match what a
     // user perceives regardless of HiDPI scaling.
     return Vec2{window_x, window_y};
@@ -5148,7 +5148,7 @@ auto Runtime::Impl::reset_input_frame() -> void
     input.key_delete_pressed = false;
     input.key_plus_pressed = false;
     input.key_minus_pressed = false;
-    input.mouse_px = framebuffer_mouse_position(mouse_x, mouse_y);
+    input.mouse_logical_px = logical_mouse_position(mouse_x, mouse_y);
     input.mouse_captured_by_ui = ImGui::GetIO().WantCaptureMouse;
     const auto mods = current_modifiers();
     input.shift_held = mods.shift;

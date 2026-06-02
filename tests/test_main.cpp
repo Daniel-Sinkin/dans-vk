@@ -651,8 +651,8 @@ auto test_picker_plugin() -> void
     });
     const auto click_hit = picker.click({
         .camera = camera,
-        .mouse_px = {400.0f, 300.0f},
-        .viewport_px = {800.0f, 600.0f},
+        .mouse_logical_px = {400.0f, 300.0f},
+        .viewport_logical_px = {800.0f, 600.0f},
     });
     check(
         click_hit.has_value() and click_hit->object_id.value == 50u, "picker click uses camera ray"
@@ -666,8 +666,8 @@ auto test_picker_plugin() -> void
     });
     const auto segment_hit = picker.click({
         .camera = camera,
-        .mouse_px = {400.0f, 300.0f},
-        .viewport_px = {800.0f, 600.0f},
+        .mouse_logical_px = {400.0f, 300.0f},
+        .viewport_logical_px = {800.0f, 600.0f},
     });
     check(
         segment_hit.has_value() and segment_hit->object_id.value == 60u,
@@ -687,8 +687,8 @@ auto test_picker_plugin() -> void
     });
     const auto above_segment_hit = picker.click({
         .camera = camera,
-        .mouse_px = above_center_px,
-        .viewport_px = {800.0f, 600.0f},
+        .mouse_logical_px = above_center_px,
+        .viewport_logical_px = {800.0f, 600.0f},
     });
     check(
         above_segment_hit.has_value() and above_segment_hit->object_id.value == 61u,
@@ -731,8 +731,8 @@ auto test_manipulator_plugin() -> void
         .input =
             dans::vk::ManipulatorInput{
                 .camera = camera,
-                .mouse_px = {400.0f, 300.0f},
-                .viewport_px = {800.0f, 600.0f},
+                .mouse_logical_px = {400.0f, 300.0f},
+                .viewport_logical_px = {800.0f, 600.0f},
                 .translate_pressed = true,
             },
         .selected_ids = std::span<const dans::vk::ObjectId>{selected},
@@ -743,8 +743,8 @@ auto test_manipulator_plugin() -> void
         .input =
             dans::vk::ManipulatorInput{
                 .camera = camera,
-                .mouse_px = {500.0f, 300.0f},
-                .viewport_px = {800.0f, 600.0f},
+                .mouse_logical_px = {500.0f, 300.0f},
+                .viewport_logical_px = {800.0f, 600.0f},
             },
         .selected_ids = std::span<const dans::vk::ObjectId>{selected},
         .callbacks = callbacks,
@@ -755,8 +755,8 @@ auto test_manipulator_plugin() -> void
         .input =
             dans::vk::ManipulatorInput{
                 .camera = camera,
-                .mouse_px = {500.0f, 300.0f},
-                .viewport_px = {800.0f, 600.0f},
+                .mouse_logical_px = {500.0f, 300.0f},
+                .viewport_logical_px = {800.0f, 600.0f},
                 .cancel_pressed = true,
             },
         .selected_ids = std::span<const dans::vk::ObjectId>{selected},
@@ -769,8 +769,8 @@ auto test_manipulator_plugin() -> void
         .input =
             dans::vk::ManipulatorInput{
                 .camera = camera,
-                .mouse_px = {400.0f, 300.0f},
-                .viewport_px = {800.0f, 600.0f},
+                .mouse_logical_px = {400.0f, 300.0f},
+                .viewport_logical_px = {800.0f, 600.0f},
                 .scale_pressed = true,
             },
         .selected_ids = std::span<const dans::vk::ObjectId>{selected},
@@ -780,8 +780,8 @@ auto test_manipulator_plugin() -> void
         .input =
             dans::vk::ManipulatorInput{
                 .camera = camera,
-                .mouse_px = {520.0f, 300.0f},
-                .viewport_px = {800.0f, 600.0f},
+                .mouse_logical_px = {520.0f, 300.0f},
+                .viewport_logical_px = {800.0f, 600.0f},
                 .confirm_pressed = true,
             },
         .selected_ids = std::span<const dans::vk::ObjectId>{selected},

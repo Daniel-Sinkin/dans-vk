@@ -37,11 +37,11 @@ struct FaceDistance
 }
 }  // namespace
 
-auto make_camera_ray(const Camera& camera, Vec2 cursor_px, Vec2 viewport_px) noexcept -> Ray
+auto make_camera_ray(const Camera& camera, Vec2 cursor_logical_px, Vec2 viewport_logical_px) noexcept -> Ray
 {
-    const auto viewport = glm::max(viewport_px, Vec2{1.0f});
-    const auto ndc_x = 2.0f * cursor_px.x / viewport.x - 1.0f;
-    const auto ndc_y = 2.0f * cursor_px.y / viewport.y - 1.0f;
+    const auto viewport = glm::max(viewport_logical_px, Vec2{1.0f});
+    const auto ndc_x = 2.0f * cursor_logical_px.x / viewport.x - 1.0f;
+    const auto ndc_y = 2.0f * cursor_logical_px.y / viewport.y - 1.0f;
     const auto aspect = viewport.x / viewport.y;
     const auto inverse_view_projection = glm::inverse(camera.view_projection_matrix(aspect));
     const Vec4 near_clip{ndc_x, ndc_y, 0.0f, 1.0f};

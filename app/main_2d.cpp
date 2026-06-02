@@ -388,7 +388,7 @@ class Visualizer
     {
         elapsed_ += dt;
         const auto& input = frame.input;
-        const auto mouse_world = runtime_->screen_to_world_2d(input.mouse_px);
+        const auto mouse_world = runtime_->screen_to_world_2d(input.mouse_logical_px);
 
         update_hover(input, mouse_world);
         handle_keyboard(input, mouse_world);
@@ -800,7 +800,7 @@ class Visualizer
 
         if (radial_open_)
         {
-            radial_hovered_ = radial_sector_under(input.mouse_px);
+            radial_hovered_ = radial_sector_under(input.mouse_logical_px);
         }
         else
         {
@@ -825,14 +825,14 @@ class Visualizer
 
         if (input.right_click.occurred and not input.mouse_captured_by_ui)
         {
-            open_radial(input.mouse_px);
+            open_radial(input.mouse_logical_px);
             return;
         }
 
         if (input.left_click.occurred and not input.mouse_captured_by_ui)
         {
             mouse_press_world_ = mouse_world;
-            mouse_press_px_ = input.mouse_px;
+            mouse_press_px_ = input.mouse_logical_px;
             mouse_action_ = MouseAction::pressed;
             const auto shift = input.left_click.modifiers.shift;
 
@@ -908,7 +908,7 @@ class Visualizer
 
         if (mouse_action_ == MouseAction::pressed and input.left_button_down)
         {
-            const auto px_delta = input.mouse_px - mouse_press_px_;
+            const auto px_delta = input.mouse_logical_px - mouse_press_px_;
             if (std::abs(px_delta.x) > k_drag_threshold_px
                 or std::abs(px_delta.y) > k_drag_threshold_px)
             {
@@ -1024,7 +1024,7 @@ class Visualizer
             }
             else
             {
-                open_radial(input.mouse_px);
+                open_radial(input.mouse_logical_px);
             }
         }
         if (input.key_left_pressed and current_frame_ > 0)

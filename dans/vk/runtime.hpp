@@ -298,17 +298,21 @@ struct KeyboardModifiers
     bool super{};
 };
 
+// Convention: every *_logical_px coordinate is in logical pixels (SDL window
+// space), matching ImGui and the 2D screen-space projection. Multiply by
+// Runtime::dpi_scale() only when you need physical framebuffer pixels;
+// Runtime::framebuffer_extent() already gives the physical size directly.
 struct MouseClick
 {
     bool occurred{};
-    Vec2 position_px{};
+    Vec2 position_logical_px{};
     u8 click_count{};
     KeyboardModifiers modifiers{};
 };
 
 struct InputState
 {
-    Vec2 mouse_px{};
+    Vec2 mouse_logical_px{};
     bool mouse_captured_by_ui{};
     bool space_pressed{};
     bool key_g_pressed{};

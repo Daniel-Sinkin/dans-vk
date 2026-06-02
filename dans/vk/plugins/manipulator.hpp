@@ -30,8 +30,8 @@ enum class ManipulatorAxis : u8
 struct ManipulatorInput
 {
     const Camera& camera;
-    Vec2 mouse_px{};
-    Vec2 viewport_px{1.0f};
+    Vec2 mouse_logical_px{};
+    Vec2 viewport_logical_px{1.0f};
     bool mouse_captured_by_ui{};
     bool translate_pressed{};
     bool rotate_pressed{};
@@ -87,7 +87,7 @@ class Manipulator
     bool active_{};
     ManipulatorMode mode_{ManipulatorMode::none};
     ManipulatorAxis axis_{ManipulatorAxis::none};
-    Vec2 start_mouse_px_{};
+    Vec2 start_mouse_logical_px_{};
     ManipulatorCallbacks callbacks_{};
     std::vector<ActiveTarget> targets_{};
     std::vector<ObjectId> active_ids_{};

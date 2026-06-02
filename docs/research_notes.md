@@ -811,11 +811,11 @@ future synchronization helpers should be thin wrappers over `vkCmdPipelineBarrie
   `dans_vk_picker` builds from `dans/vk/plugins/picker.cpp` and links into apps or
   tests that want object selection.
 - The runtime exposes per-frame mouse state through `FrameContext::input`.
-  A left click is recorded only when ImGui does not want the mouse, and SDL
-  window coordinates are converted to framebuffer pixels so Retina swapchains
-  and `make_pick_ray` agree.
+  A left click is recorded only when ImGui does not want the mouse. SDL window
+  coordinates are kept in logical pixels; pass a logical-pixel viewport (not the
+  framebuffer extent) so the cursor and `make_camera_ray` agree on HiDPI.
 - `dans::vk::Picker` has two public query paths:
-  - `click({.camera, .mouse_px, .viewport_px, .layer_mask})`, for normal app UI
+  - `click({.camera, .mouse_logical_px, .viewport_logical_px, .layer_mask})`, for normal app UI
     mouse picking;
   - `raycast({.ray, .layer_mask})`, for code that already has a world-space ray.
 - The picker currently supports sphere, AABB, OBB, capsule, and screen-space

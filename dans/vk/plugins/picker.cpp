@@ -33,10 +33,10 @@ template <typename Config>
     };
 }
 
-[[nodiscard]] auto project_to_screen(const Camera& camera, Vec3 position, Vec2 viewport_px) noexcept
+[[nodiscard]] auto project_to_screen(const Camera& camera, Vec3 position, Vec2 viewport_logical_px) noexcept
     -> std::optional<ScreenPoint>
 {
-    const auto viewport = glm::max(viewport_px, Vec2{1.0f});
+    const auto viewport = glm::max(viewport_logical_px, Vec2{1.0f});
     const auto clip = camera.view_projection_matrix(viewport.x / viewport.y) * Vec4{position, 1.0f};
     if (clip.w <= 0.0f)
     {
@@ -62,12 +62,12 @@ template <typename Config>
     const Segment& segment,
     f32 radius_px,
     const Camera& camera,
-    Vec2 mouse_px,
-    Vec2 viewport_px
+    Vec2 mouse_logical_px,
+    Vec2 viewport_logical_px
 ) noexcept -> std::optional<RayHit>
 {
-    const auto start = project_to_screen(camera, segment.start, viewport_px);
-    const auto end = project_to_screen(camera, segment.end, viewport_px);
+    const auto start = project_to_screen(camera, segment.start, viewport_logical_px);
+    const auto end = project_to_screen(camera, segment.end, viewport_logical_px);
     if (!start.has_value() or !end.has_value())
     {
         return std::nullopt;
@@ -80,10 +80,10 @@ template <typename Config>
         return std::nullopt;
     }
     const auto t = std::clamp(
-        glm::dot(mouse_px - start->position, screen_segment) / length_squared, 0.0f, 1.0f
+        glm::dot(mouse_logical_px - start->position, screen_segment) / length_squared, 0.0f, 1.0f
     );
     const auto closest = start->position + t * screen_segment;
-    if (glm::length(mouse_px - closest) > std::max(0.0f, radius_px))
+    if (glm::length(mouse_logical_px - closest) > std::max(0.0f, radius_px))
     {
         return std::nullopt;
     }
@@ -224,7 +224,7 @@ auto Picker::raycast(const Ray& ray) const -> std::optional<PickerHit>
 
 auto Picker::click(const PickerClickConfig& config) const -> std::optional<PickerHit>
 {
-    const auto ray = make_camera_ray(config.camera, config.mouse_px, config.viewport_px);
+    const auto ray = make_camera_ray(config.camera, config.mouse_logical_px, config.viewport_logical_px);
     auto best = raycast(PickerRaycastConfig{.ray = ray, .layer_mask = config.layer_mask});
     for (const auto& target : targets_)
     {
@@ -241,8 +241,8 @@ auto Picker::click(const PickerClickConfig& config) const -> std::optional<Picke
             target.screen_segment,
             target.screen_segment_radius_px,
             config.camera,
-            config.mouse_px,
-            config.viewport_px
+            config.mouse_logical_px,
+            config.viewport_logical_px
         );
         if (hit.has_value() and (!best.has_value() or hit->distance < best->distance))
         {

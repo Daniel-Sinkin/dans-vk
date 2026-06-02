@@ -103,8 +103,8 @@ struct PickerRaycastConfig
 struct PickerClickConfig
 {
     const Camera& camera;
-    Vec2 mouse_px{};
-    Vec2 viewport_px{};
+    Vec2 mouse_logical_px{};
+    Vec2 viewport_logical_px{};
     LayerMask layer_mask{k_pick_layer_all};
 };
 
