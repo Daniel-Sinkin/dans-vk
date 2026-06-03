@@ -60,6 +60,7 @@ struct GltfWriteConfig
 
 [[nodiscard]] auto load_gltf_mesh(const std::filesystem::path&, const GltfMeshLoadConfig& = {})
     -> MeshData;
+
 auto write_gltf_scene(
     const std::filesystem::path&,
     std::span<const GltfMeshData>,

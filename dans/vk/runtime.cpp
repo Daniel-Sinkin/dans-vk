@@ -1,5 +1,6 @@
 #include "dans/vk/runtime.hpp"
 
+#include "dans/dans-core/development_markers.hpp"
 #include "dans/font/font_atlas.hpp"
 #include "dans/geom/geometry.hpp"
 #include "dans/image/image.hpp"
@@ -34,11 +35,11 @@
 
 namespace dans::vk
 {
+using dans::camera::make_camera_ray;
+using dans::camera::ProjectionMode;
+using dans::font::bake_font;
 using dans::font::BakedFont;
 using dans::font::FontBakeConfig;
-using dans::camera::ProjectionMode;
-using dans::camera::make_camera_ray;
-using dans::font::bake_font;
 using dans::font::glyph_for;
 using dans::geom::normalize_or;
 using dans::mesh::PositionNormalVertex;
@@ -67,11 +68,12 @@ struct MeshResource
 {
     Buffer vertices{};
     Buffer indices{};
-    Mat4 position_model{1.0f};
+    Mat4 position_model{k_mat4_identity};
     u32 vertex_count{};
     u32 index_count{};
     usize vertex_capacity{};
     usize index_capacity{};
+
     MeshVertexFormat vertex_format{MeshVertexFormat::standard};
 };
 
@@ -130,7 +132,7 @@ struct GpuLight
 struct GpuLighting
 {
     Vec4 ambient_light_count{};
-    Mat4 shadow_view_projection{1.0f};
+    Mat4 shadow_view_projection{k_mat4_identity};
     Vec4 shadow_params{};
     Vec4 environment_params{};
     std::array<GpuLight, k_max_lights> lights{};
@@ -202,15 +204,16 @@ struct SwapchainCapture
 
 struct MeshPushConstants
 {
-    Mat4 view_projection{1.0f};
-    Mat4 model{1.0f};
+    Mat4 view_projection{k_mat4_identity};
+    Mat4 model{k_mat4_identity};
 };
 
 struct GpuMeshInstance
 {
-    Mat4 model{1.0f};
-    Mat4 normal_model{1.0f};
+    Mat4 model{k_mat4_identity};
+    Mat4 normal_model{k_mat4_identity};
     u32 material_index{};
+    // Pad to 144 B so the std430 per-instance stride stays 16-byte aligned.
     std::array<u32, 3> _pad{};
 };
 
@@ -223,14 +226,14 @@ struct MeshBatch
 
 struct DebugPushConstants
 {
-    Mat4 view_projection{1.0f};
+    Mat4 view_projection{k_mat4_identity};
     Vec4 camera_position{0.0f, 0.0f, 0.0f, 1.0f};
     Vec4 camera_right{k_axis_x, 0.0f};
 };
 
 struct EnvironmentPushConstants
 {
-    Mat4 inverse_view_projection{1.0f};
+    Mat4 inverse_view_projection{k_mat4_identity};
     Vec4 camera_position{0.0f, 0.0f, 0.0f, 1.0f};
     Vec4 params{};
     Vec4 background_color{};
@@ -248,12 +251,12 @@ struct TextInstance
 
 struct TextPushConstants
 {
-    Mat4 view_projection{1.0f};
+    Mat4 view_projection{k_mat4_identity};
 };
 
 struct ShapePushConstants
 {
-    Mat4 view_projection{1.0f};
+    Mat4 view_projection{k_mat4_identity};
 };
 
 // clang-format off
@@ -309,7 +312,7 @@ constexpr auto k_required_push_constant_bytes = std::max({
 
 [[nodiscard]] auto position_decode_model(const Vec3 origin, const Vec3 extent) noexcept -> Mat4
 {
-    return glm::translate(Mat4{1.0f}, origin) * glm::scale(Mat4{1.0f}, extent);
+    return glm::translate(k_mat4_identity, origin) * glm::scale(k_mat4_identity, extent);
 }
 
 [[nodiscard]] auto to_gpu_mesh_instance(
@@ -428,10 +431,7 @@ auto to_gpu_material(
 
 [[nodiscard]] auto shadow_supported_by_light(const LightConfig& light) noexcept -> bool
 {
-    if (!light.shadow.enabled)
-    {
-        return false;
-    }
+    if (!light.shadow.enabled) return false;
 
     switch (light.type)
     {
@@ -444,16 +444,14 @@ auto to_gpu_material(
     return false;
 }
 
-[[nodiscard]] auto shadow_light_index(std::span<const LightConfig> lights) noexcept -> usize
+[[nodiscard]] auto shadow_light_index(std::span<const LightConfig> lights) noexcept
+    -> std::optional<usize>
 {
-    for (auto i = 0zu; i < std::min(lights.size(), k_max_lights); ++i)
+    for (auto i = 0zu; i < lights.size() and i < k_max_lights; ++i)
     {
-        if (shadow_supported_by_light(lights[i]))
-        {
-            return i;
-        }
+        if (shadow_supported_by_light(lights[i])) return i;
     }
-    return std::numeric_limits<usize>::max();
+    return std::nullopt;
 }
 
 [[nodiscard]] auto light_view_matrix(Vec3 position, Vec3 direction) noexcept -> Mat4
@@ -498,7 +496,7 @@ auto to_gpu_material(
                 return projection;
             }
     }
-    return Mat4{1.0f};
+    return k_mat4_identity;
 }
 
 [[nodiscard]] auto
@@ -520,7 +518,7 @@ light_view_projection_matrix(const LightConfig& light, const Camera& camera) noe
                        * light_view_matrix(position, direction);
             }
     }
-    return Mat4{1.0f};
+    return k_mat4_identity;
 }
 
 [[nodiscard]] auto build_gpu_lighting(
@@ -528,7 +526,7 @@ light_view_projection_matrix(const LightConfig& light, const Camera& camera) noe
     Color ambient_light,
     const EnvironmentConfig& environment,
     const Camera& camera,
-    usize shadow_index,
+    std::optional<usize> shadow_index,
     u32 shadow_resolution
 ) noexcept -> GpuLighting
 {
@@ -552,9 +550,9 @@ light_view_projection_matrix(const LightConfig& light, const Camera& camera) noe
                 : -1.0f,
         },
     };
-    if (shadow_index < lights.size())
+    if (shadow_index.has_value() and *shadow_index < lights.size())
     {
-        const auto& shadow_light = lights[shadow_index];
+        const auto& shadow_light = lights[*shadow_index];
         lighting.shadow_view_projection = light_view_projection_matrix(shadow_light, camera);
         lighting.shadow_params = Vec4{
             1.0f,
@@ -1189,8 +1187,8 @@ auto Runtime::Impl::load_texture(
 
     const auto loaded = dans::image::load_rgba8(path);
     const auto format = load_config.srgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
-    auto texture
-        = create_texture_resource(loaded.storage.data(), loaded.width, loaded.height, format, 4u);
+    auto texture =
+        create_texture_resource(loaded.storage.data(), loaded.width, loaded.height, format, 4u);
 
     const auto index = static_cast<u32>(textures.size());
     try
@@ -1716,7 +1714,7 @@ auto Runtime::Impl::destroy_mesh_resource(MeshResource& mesh) noexcept -> void
 {
     destroy_buffer(mesh.vertices);
     destroy_buffer(mesh.indices);
-    mesh.position_model = Mat4{1.0f};
+    mesh.position_model = k_mat4_identity;
     mesh.vertex_count = 0u;
     mesh.index_count = 0u;
     mesh.vertex_capacity = 0zu;
@@ -3545,17 +3543,26 @@ auto Runtime::Impl::destroy_pipelines() noexcept -> void
 auto Runtime::Impl::draw_shadow_map(const VkCommandBuffer command_buffer) -> void
 {
     const auto& mesh_commands = draw_list.mesh_commands();
-    const auto& lights = draw_list.lights();
-    const auto shadow_index = shadow_light_index(lights);
-    if (mesh_commands.empty() or shadow_index >= lights.size()
-        or shadow_map.framebuffer == VK_NULL_HANDLE
-        or (shadow_pipeline == VK_NULL_HANDLE and shadow_position_normal_pipeline == VK_NULL_HANDLE
-            and shadow_quantized_position_pipeline == VK_NULL_HANDLE))
+
+    const auto no_pipeline = [&]
+    {
+        if (shadow_pipeline != VK_NULL_HANDLE) return false;
+        if (shadow_position_normal_pipeline != VK_NULL_HANDLE) return false;
+        if (shadow_quantized_position_pipeline != VK_NULL_HANDLE) return false;
+        return true;
+    }();
+    auto no_framebuffer = shadow_map.framebuffer == VK_NULL_HANDLE;
+    if (mesh_commands.empty() or no_pipeline or no_framebuffer)
     {
         return;
     }
 
-    const auto shadow_view_projection = light_view_projection_matrix(lights[shadow_index], camera);
+    const auto& lights = draw_list.lights();
+    const auto shadow_index = shadow_light_index(lights);
+    if (!shadow_index) return;
+
+    const auto shadow_view_projection = light_view_projection_matrix(lights[*shadow_index], camera);
+
     const auto clear =
         VkClearValue{.depthStencil = VkClearDepthStencilValue{.depth = 1.0f, .stencil = 0}};
     VkRenderPassBeginInfo render_pass_begin{};
@@ -3834,7 +3841,7 @@ auto Runtime::Impl::draw_meshes(
     );
     const MeshPushConstants push{
         .view_projection = view_projection,
-        .model = Mat4{1.0f},
+        .model = k_mat4_identity,
     };
     vkCmdPushConstants(
         command_buffer, mesh_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push), &push
@@ -3985,13 +3992,22 @@ auto append_text_instances(
             {
                 out.push_back(
                     TextInstance{
-                        .position
-                        = Vec2{cursor.x + glyph->offset_x * scale, cursor.y + glyph->offset_y * scale},
+                        .position =
+                            Vec2{
+                                cursor.x + glyph->offset_x * scale,
+                                cursor.y + glyph->offset_y * scale
+                            },
                         .size = Vec2{glyph->width * scale, glyph->height * scale},
-                        .uv_position
-                        = Vec2{static_cast<f32>(glyph->atlas_x) * inv_atlas_w, static_cast<f32>(glyph->atlas_y) * inv_atlas_h},
-                        .uv_size
-                        = Vec2{static_cast<f32>(glyph->atlas_w) * inv_atlas_w, static_cast<f32>(glyph->atlas_h) * inv_atlas_h},
+                        .uv_position =
+                            Vec2{
+                                static_cast<f32>(glyph->atlas_x) * inv_atlas_w,
+                                static_cast<f32>(glyph->atlas_y) * inv_atlas_h
+                            },
+                        .uv_size =
+                            Vec2{
+                                static_cast<f32>(glyph->atlas_w) * inv_atlas_w,
+                                static_cast<f32>(glyph->atlas_h) * inv_atlas_h
+                            },
                         .color = to_vec4(cmd.color),
                     }
                 );
@@ -4176,9 +4192,8 @@ auto Runtime::Impl::draw_shapes(
     }
 
     const auto total_count = world_count + screen_count;
-    const auto byte_count = static_cast<VkDeviceSize>(
-        static_cast<VkDeviceSize>(total_count) * sizeof(Shape2DInstance)
-    );
+    const auto byte_count =
+        static_cast<VkDeviceSize>(static_cast<VkDeviceSize>(total_count) * sizeof(Shape2DInstance));
     auto& buffer = ensure_shape_instance_buffer(frame_index, byte_count);
     auto* dst = static_cast<std::byte*>(buffer.mapped);
     if (world_count > 0u)
@@ -4270,8 +4285,10 @@ auto Runtime::Impl::compute_dpi_scale() const noexcept -> f32
     auto framebuffer_height = 1;
     SDL_GetWindowSize(window, &window_width, &window_height);
     SDL_GetWindowSizeInPixels(window, &framebuffer_width, &framebuffer_height);
-    const auto sx = static_cast<f32>(framebuffer_width) / static_cast<f32>(std::max(1, window_width));
-    const auto sy = static_cast<f32>(framebuffer_height) / static_cast<f32>(std::max(1, window_height));
+    const auto sx =
+        static_cast<f32>(framebuffer_width) / static_cast<f32>(std::max(1, window_width));
+    const auto sy =
+        static_cast<f32>(framebuffer_height) / static_cast<f32>(std::max(1, window_height));
     return std::max(sx, sy);
 }
 
@@ -4647,8 +4664,8 @@ auto Runtime::Impl::handle_event(const SDL_Event& event) -> void
         else
         {
             const auto sensitivity = std::clamp(camera.zoom_sensitivity(), 0.10f, 4.0f);
-            const auto distance
-                = camera.distance() * std::exp(-event.wheel.y * 0.12f * sensitivity);
+            const auto distance =
+                camera.distance() * std::exp(-event.wheel.y * 0.12f * sensitivity);
             camera.set_distance(std::clamp(distance, 0.12f, 200.0f));
         }
     }

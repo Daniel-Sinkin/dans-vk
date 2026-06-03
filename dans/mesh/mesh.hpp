@@ -99,12 +99,15 @@ struct UvSphereConfig
 [[nodiscard]] auto make_quad(f32 side_length = 1.0f, Color color = Color::white) -> MeshData;
 [[nodiscard]] auto make_cube(f32 side_length = 1.0f, Color color = Color::white) -> MeshData;
 [[nodiscard]] auto make_uv_sphere(const UvSphereConfig& = {}) -> MeshData;
+
 [[nodiscard]] auto aabb_of(const MeshData&) -> Aabb;
 [[nodiscard]] auto aabb_of(const PositionNormalMeshData&) -> Aabb;
 [[nodiscard]] auto aabb_of(const QuantizedPositionNormalMeshData&) -> Aabb;
+
 [[nodiscard]] auto triangle_count(const MeshData&) noexcept -> usize;
 [[nodiscard]] auto triangle_count(const PositionNormalMeshData&) noexcept -> usize;
 [[nodiscard]] auto triangle_count(const QuantizedPositionNormalMeshData&) noexcept -> usize;
+
 [[nodiscard]] auto has_valid_indices(const MeshData&) noexcept -> bool;
 [[nodiscard]] auto has_valid_indices(const PositionNormalMeshData&) noexcept -> bool;
 [[nodiscard]] auto has_valid_indices(const QuantizedPositionNormalMeshData&) noexcept -> bool;

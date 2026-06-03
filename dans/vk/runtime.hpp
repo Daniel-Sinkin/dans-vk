@@ -1,10 +1,10 @@
 #pragma once
 
 #include "dans/camera/camera.hpp"
-#include "dans/vk/debug_draw.hpp"
 #include "dans/font/font_atlas.hpp"
-#include "dans/vk/drawlist.hpp"
 #include "dans/mesh/mesh.hpp"
+#include "dans/vk/debug_draw.hpp"
+#include "dans/vk/drawlist.hpp"
 #include "dans/vk/shape_draw.hpp"
 #include "dans/vk/text_draw.hpp"
 #include "dans/vk/types.hpp"
@@ -211,60 +211,79 @@ class Runtime
     Runtime(Runtime&&) noexcept;
     auto operator=(Runtime&&) noexcept -> Runtime&;
 
-    // clang-format off
-    auto initialize()                -> void;
-    auto shutdown() noexcept         -> void;
+    auto initialize() -> void;
+    auto shutdown() noexcept -> void;
 
     [[nodiscard]] auto begin_frame() -> FrameContext*;
-    [[nodiscard]] auto frame()       -> FrameContext&;
+    [[nodiscard]] auto frame() -> FrameContext&;
     [[nodiscard]] auto frame() const -> const FrameContext&;
 
-    auto draw_runtime_ui()    -> void;
+    auto draw_runtime_ui() -> void;
     auto render_shadow_pass() -> void;
-    auto begin_main_pass()    -> void;
-    auto render_draw_list()   -> void;
-    auto render_imgui()       -> void;
-    auto end_main_pass()      -> void;
-    auto end_frame()          -> void;
+    auto begin_main_pass() -> void;
+    auto render_draw_list() -> void;
+    auto render_imgui() -> void;
+    auto end_main_pass() -> void;
+    auto end_frame() -> void;
 
     [[nodiscard]] auto ui_visible() const noexcept -> bool;
 
-    [[nodiscard]] auto upload_mesh(const MeshData&)                        -> MeshHandle;
-    [[nodiscard]] auto upload_mesh(const PositionNormalMeshData&)          -> MeshHandle;
+    [[nodiscard]] auto upload_mesh(const MeshData&) -> MeshHandle;
+    [[nodiscard]] auto upload_mesh(const PositionNormalMeshData&) -> MeshHandle;
     [[nodiscard]] auto upload_mesh(const QuantizedPositionNormalMeshData&) -> MeshHandle;
-    [[nodiscard]] auto reserve_mesh_capacity(const MeshReserveConfig&)     -> MeshHandle;
+    [[nodiscard]] auto reserve_mesh_capacity(const MeshReserveConfig&) -> MeshHandle;
 
     // Reuses existing buffers when capacity permits. Callers must avoid updating a handle
     // still used by in-flight command buffers.
-    [[nodiscard]] auto update_mesh(MeshHandle, const MeshData&, const MeshUpdateConfig& = {})                        -> MeshHandle;
-    [[nodiscard]] auto update_mesh(MeshHandle, const PositionNormalMeshData&, const MeshUpdateConfig& = {})          -> MeshHandle;
-    [[nodiscard]] auto update_mesh(MeshHandle, const QuantizedPositionNormalMeshData&, const MeshUpdateConfig& = {}) -> MeshHandle;
+    [[nodiscard]] auto update_mesh(MeshHandle, const MeshData&, const MeshUpdateConfig& = {})
+        -> MeshHandle;
+    [[nodiscard]] auto
+    update_mesh(MeshHandle, const PositionNormalMeshData&, const MeshUpdateConfig& = {})
+        -> MeshHandle;
+    [[nodiscard]] auto
+    update_mesh(MeshHandle, const QuantizedPositionNormalMeshData&, const MeshUpdateConfig& = {})
+        -> MeshHandle;
 
     [[nodiscard]] auto replace_mesh(MeshHandle, const MeshData&) -> MeshHandle;
-    [[nodiscard]] auto load_texture(const std::filesystem::path&, const TextureLoadConfig& = {}) -> TextureHandle;
-    [[nodiscard]] auto load_hdr_texture(const std::filesystem::path&, const HdrTextureLoadConfig& = {}) -> TextureHandle;
-    [[nodiscard]] auto upload_texture_rgba(std::span<const ColorU8>, u32 width, u32 height, const TextureLoadConfig& = {}) -> TextureHandle;
+
+    [[nodiscard]] auto load_texture(const std::filesystem::path&, const TextureLoadConfig& = {})
+        -> TextureHandle;
+    [[nodiscard]] auto
+    load_hdr_texture(const std::filesystem::path&, const HdrTextureLoadConfig& = {})
+        -> TextureHandle;
+
+    [[nodiscard]] auto upload_texture_rgba(
+        std::span<const ColorU8>, u32 width, u32 height, const TextureLoadConfig& = {}
+    ) -> TextureHandle;
+
     [[nodiscard]] auto imgui_texture_id(TextureHandle) -> uptr;
+
     auto load_font(const dans::font::FontBakeConfig&) -> void;
+
     [[nodiscard]] auto font() const noexcept -> const dans::font::BakedFont&;
     [[nodiscard]] auto font_loaded() const noexcept -> bool;
+
     auto request_screenshot(std::filesystem::path path, bool transparent = false) -> void;
 
-    auto camera(const CameraConfig&)                       noexcept -> Camera&;
-    [[nodiscard]] auto camera()                            noexcept -> Camera&;
-    [[nodiscard]] auto camera()                      const noexcept -> const Camera&;
+    auto camera(const CameraConfig&) noexcept -> Camera&;
 
-    [[nodiscard]] auto render_mode()                 const noexcept -> RenderMode;
-    [[nodiscard]] auto camera_2d_pivot()             const noexcept -> Vec2;
-    [[nodiscard]] auto camera_2d_zoom()              const noexcept -> f32;
-    auto set_camera_2d(Vec2 pivot, f32 zoom)               noexcept -> void;
+    [[nodiscard]] auto camera() noexcept -> Camera&;
+    [[nodiscard]] auto camera() const noexcept -> const Camera&;
+    [[nodiscard]] auto render_mode() const noexcept -> RenderMode;
+    [[nodiscard]] auto camera_2d_pivot() const noexcept -> Vec2;
+    [[nodiscard]] auto camera_2d_zoom() const noexcept -> f32;
+
+    auto set_camera_2d(Vec2 pivot, f32 zoom) noexcept -> void;
+
     [[nodiscard]] auto screen_to_world_2d(Vec2 pixel) const noexcept -> Vec2;
-    [[nodiscard]] auto framebuffer_extent()          const noexcept -> Vec2;
-    [[nodiscard]] auto logical_extent()              const noexcept -> Vec2;
-    [[nodiscard]] auto dpi_scale()                   const noexcept -> f32;
-    [[nodiscard]] auto stats()                       const noexcept -> const RuntimeStats&;
-    [[nodiscard]] auto descriptor_indexing_support() const noexcept -> const DescriptorIndexingSupport&;
-    // clang-format on
+
+    [[nodiscard]] auto descriptor_indexing_support() const noexcept
+        -> const DescriptorIndexingSupport&;
+
+    [[nodiscard]] auto framebuffer_extent() const noexcept -> Vec2;
+    [[nodiscard]] auto logical_extent() const noexcept -> Vec2;
+    [[nodiscard]] auto dpi_scale() const noexcept -> f32;
+    [[nodiscard]] auto stats() const noexcept -> const RuntimeStats&;
 
     template <typename App>
     [[nodiscard]]
