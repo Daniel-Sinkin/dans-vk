@@ -13,10 +13,6 @@
 
 namespace dans::vk
 {
-namespace
-{
-constexpr f32 k_debug_arrow_min_length_widths{8.0f};
-}  // namespace
 
 auto DrawList::clear() -> void
 {
@@ -72,6 +68,10 @@ auto DrawList::draw_basic_mesh(const BasicMeshDrawConfig& cfg) -> void
 
 auto DrawList::debug_line(const DebugLineConfig& cfg) -> void
 {
+    const auto valid = is_valid(cfg);
+    assert(valid);
+    if (not valid) return;
+
     auto& segments = cfg.draw_on_top ? debug_on_top_segments_ : debug_segments_;
     segments.push_back(
         DebugSegment{
@@ -86,11 +86,9 @@ auto DrawList::debug_line(const DebugLineConfig& cfg) -> void
 
 auto DrawList::debug_arrow(const DebugArrowConfig& cfg) -> void
 {
-    assert(cfg.width >= 0.0f);
-    const auto min_length = std::max(1.0e-6f, k_debug_arrow_min_length_widths * cfg.width);
-    const auto long_enough = glm::dot(cfg.vector, cfg.vector) >= min_length * min_length;
-    assert(long_enough);
-    if (not long_enough) return;
+    const auto valid = is_valid(cfg);
+    assert(valid);
+    if (not valid) return;
 
     auto& segments = cfg.draw_on_top ? debug_on_top_segments_ : debug_segments_;
     segments.push_back(
@@ -106,9 +104,9 @@ auto DrawList::debug_arrow(const DebugArrowConfig& cfg) -> void
 
 auto DrawList::debug_sphere(const DebugSphereConfig& cfg) -> void
 {
-    assert(cfg.radius > 0.0f);
-    assert(cfg.segments >= 8u);
-    if (cfg.radius <= 0.0f or cfg.segments < 8u) return;
+    const auto valid = is_valid(cfg);
+    assert(valid);
+    if (not valid) return;
 
     const auto segments_f = static_cast<f32>(cfg.segments);
     for (auto i = 0u; i < cfg.segments; ++i)
@@ -244,7 +242,10 @@ auto DrawList::text_screen(const TextScreenConfig& cfg) -> void
 
 auto DrawList::rect(const RectConfig& cfg) -> void
 {
-    assert(cfg.size.x > 0.0f and cfg.size.y > 0.0f);
+    const auto valid = is_valid(cfg);
+    assert(valid);
+    if (not valid) return;
+
     auto& list = cfg.screen_space ? screen_shapes_ : world_shapes_;
     list.push_back(
         Shape2DInstance{
@@ -261,7 +262,10 @@ auto DrawList::rect(const RectConfig& cfg) -> void
 
 auto DrawList::circle(const CircleConfig& cfg) -> void
 {
-    assert(cfg.radius > 0.0f);
+    const auto valid = is_valid(cfg);
+    assert(valid);
+    if (not valid) return;
+
     const auto diameter = 2.0f * cfg.radius;
     auto& list = cfg.screen_space ? screen_shapes_ : world_shapes_;
     list.push_back(
@@ -280,9 +284,10 @@ auto DrawList::circle(const CircleConfig& cfg) -> void
 
 auto DrawList::line_2d(const Line2DConfig& cfg) -> void
 {
-    assert(cfg.thickness > 0.0f);
-    assert(cfg.dash_on >= 0.0f and cfg.dash_off >= 0.0f);
-    assert((cfg.dash_on != k_dash_disabled) == (cfg.dash_off != k_dash_disabled));
+    const auto valid = is_valid(cfg);
+    assert(valid);
+    if (not valid) return;
+
     const auto pad = cfg.thickness * 0.5f + 1.0f;
     const auto min_x = std::min(cfg.start.x, cfg.end.x) - pad;
     const auto min_y = std::min(cfg.start.y, cfg.end.y) - pad;
@@ -308,7 +313,10 @@ auto DrawList::line_2d(const Line2DConfig& cfg) -> void
 
 auto DrawList::sector(const SectorConfig& cfg) -> void
 {
-    assert(cfg.outer_radius > 0.0f);
+    const auto valid = is_valid(cfg);
+    assert(valid);
+    if (not valid) return;
+
     const auto diameter = 2.0f * cfg.outer_radius;
     auto& list = cfg.screen_space ? screen_shapes_ : world_shapes_;
     list.push_back(
@@ -332,8 +340,10 @@ auto DrawList::sector(const SectorConfig& cfg) -> void
 
 auto DrawList::bezier(const BezierConfig& cfg) -> void
 {
-    assert(cfg.thickness > 0.0f);
-    assert(cfg.segments > 0zu);
+    const auto valid = is_valid(cfg);
+    assert(valid);
+    if (not valid) return;
+
     const auto step = 1.0f / static_cast<f32>(cfg.segments);
     auto previous = cfg.start;
     auto cumulative_arc = 0.0f;
