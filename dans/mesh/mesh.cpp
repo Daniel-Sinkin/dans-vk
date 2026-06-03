@@ -6,35 +6,15 @@
 #include <glm/gtc/quaternion.hpp>
 // StdLib
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <numbers>
+#include <span>
 //
 
 namespace dans::mesh
 {
-namespace
-{
-auto push_face(MeshData& mesh, Vec3 a, Vec3 b, Vec3 c, Vec3 d, Vec3 normal, Color color) -> void
-{
-    const auto base = static_cast<u32>(mesh.vertices.size());
-    mesh.vertices.push_back(
-        Vertex{.position = a, .normal = normal, .color = color, .texcoord = {0.0f, 0.0f}}
-    );
-    mesh.vertices.push_back(
-        Vertex{.position = b, .normal = normal, .color = color, .texcoord = {1.0f, 0.0f}}
-    );
-    mesh.vertices.push_back(
-        Vertex{.position = c, .normal = normal, .color = color, .texcoord = {1.0f, 1.0f}}
-    );
-    mesh.vertices.push_back(
-        Vertex{.position = d, .normal = normal, .color = color, .texcoord = {0.0f, 1.0f}}
-    );
-    mesh.indices.insert(
-        mesh.indices.end(), {base + 0u, base + 1u, base + 2u, base + 0u, base + 2u, base + 3u}
-    );
-}
-}  // namespace
 
 auto Transform::matrix() const noexcept -> Mat4
 {
@@ -44,103 +24,128 @@ auto Transform::matrix() const noexcept -> Mat4
     return translation_matrix * rotation_matrix * scale_matrix;
 }
 
+namespace
+{
+// Unit (side length 1) geometry, built at compile time. The runtime make_*
+// wrappers scale these positions by the requested side length and apply color.
+[[nodiscard]] constexpr auto build_unit_quad_vertices() -> std::array<Vertex, 4>
+{
+    constexpr auto h = 0.5f;
+    constexpr std::array<Vec2, 4> xy{{{-h, -h}, {h, -h}, {h, h}, {-h, h}}};
+    constexpr std::array<Vec2, 4> uv{{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
+    std::array<Vertex, 4> vertices{};
+    for (auto k = 0zu; k < vertices.size(); ++k)
+    {
+        vertices[k] = Vertex{
+            .position = {xy[k].x, xy[k].y, 0.0f},
+            .normal = k_axis_z,
+            .color = Color::white,
+            .texcoord = uv[k],
+        };
+    }
+    return vertices;
+}
+
+[[nodiscard]] constexpr auto build_unit_cube_vertices() -> std::array<Vertex, 24>
+{
+    constexpr auto h = 0.5f;
+    // Corner index is (x << 2) | (y << 1) | z, with bit 0 = -h and 1 = +h.
+    constexpr std::array<Vec3, 8> corner{{
+        {-h, -h, -h},
+        {-h, -h, h},
+        {-h, h, -h},
+        {-h, h, h},
+        {h, -h, -h},
+        {h, -h, h},
+        {h, h, -h},
+        {h, h, h},
+    }};
+    struct Face
+    {
+        std::array<u32, 4> corners;
+        Vec3 normal;
+    };
+    constexpr std::array<Face, 6> faces{{
+        Face{.corners = {0b001u, 0b101u, 0b111u, 0b011u}, .normal = k_axis_z},
+        Face{.corners = {0b100u, 0b000u, 0b010u, 0b110u}, .normal = -k_axis_z},
+        Face{.corners = {0b101u, 0b100u, 0b110u, 0b111u}, .normal = k_axis_x},
+        Face{.corners = {0b000u, 0b001u, 0b011u, 0b010u}, .normal = -k_axis_x},
+        Face{.corners = {0b011u, 0b111u, 0b110u, 0b010u}, .normal = k_axis_y},
+        Face{.corners = {0b000u, 0b100u, 0b101u, 0b001u}, .normal = -k_axis_y},
+    }};
+    constexpr std::array<Vec2, 4> uv{{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
+
+    std::array<Vertex, 24> vertices{};
+    auto index = 0zu;
+    for (const auto& face : faces)
+    {
+        for (auto k = 0zu; k < 4zu; ++k)
+        {
+            vertices[index++] = Vertex{
+                .position = corner[face.corners[k]],
+                .normal = face.normal,
+                .color = Color::white,
+                .texcoord = uv[k],
+            };
+        }
+    }
+    return vertices;
+}
+
+[[nodiscard]] constexpr auto build_cube_indices() -> std::array<u32, 36>
+{
+    constexpr std::array<u32, 6> face_pattern{{0u, 1u, 2u, 0u, 2u, 3u}};
+    std::array<u32, 36> indices{};
+    auto index = 0zu;
+    for (auto face = 0u; face < 6u; ++face)
+    {
+        for (const auto offset : face_pattern)
+        {
+            indices[index++] = face * 4u + offset;
+        }
+    }
+    return indices;
+}
+
+constexpr auto k_unit_quad_vertices = build_unit_quad_vertices();
+constexpr std::array<u32, 6> k_unit_quad_indices{{0u, 1u, 2u, 0u, 2u, 3u}};
+constexpr auto k_unit_cube_vertices = build_unit_cube_vertices();
+constexpr auto k_unit_cube_indices = build_cube_indices();
+
+[[nodiscard]] auto scaled_colored_mesh(
+    std::span<const Vertex> unit_vertices,
+    std::span<const u32> indices,
+    f32 side_length,
+    Color color
+) -> MeshData
+{
+    const auto scale = std::max(0.0f, side_length);
+    MeshData mesh{};
+    mesh.vertices.reserve(unit_vertices.size());
+    for (const auto& vertex : unit_vertices)
+    {
+        mesh.vertices.push_back(
+            Vertex{
+                .position = vertex.position * scale,
+                .normal = vertex.normal,
+                .color = color,
+                .texcoord = vertex.texcoord,
+            }
+        );
+    }
+    mesh.indices.assign(indices.begin(), indices.end());
+    return mesh;
+}
+}  // namespace
+
 auto make_quad(f32 side_length, Color color) -> MeshData
 {
-    const auto half = 0.5f * std::max(0.0f, side_length);
-    MeshData mesh{};
-    mesh.vertices = {
-        Vertex{
-            .position = {-half, -half, 0.0f},
-            .normal = k_axis_z,
-            .color = color,
-            .texcoord = {0.0f, 0.0f},
-        },
-        Vertex{
-            .position = {half, -half, 0.0f},
-            .normal = k_axis_z,
-            .color = color,
-            .texcoord = {1.0f, 0.0f},
-        },
-        Vertex{
-            .position = {half, half, 0.0f},
-            .normal = k_axis_z,
-            .color = color,
-            .texcoord = {1.0f, 1.0f},
-        },
-        Vertex{
-            .position = {-half, half, 0.0f},
-            .normal = k_axis_z,
-            .color = color,
-            .texcoord = {0.0f, 1.0f},
-        },
-    };
-    mesh.indices = {0u, 1u, 2u, 0u, 2u, 3u};
-    return mesh;
+    return scaled_colored_mesh(k_unit_quad_vertices, k_unit_quad_indices, side_length, color);
 }
 
 auto make_cube(f32 side_length, Color color) -> MeshData
 {
-    const auto half = 0.5f * std::max(0.0f, side_length);
-    MeshData mesh{};
-    mesh.vertices.reserve(24zu);
-    mesh.indices.reserve(36zu);
-
-    push_face(
-        mesh,
-        {-half, -half, half},
-        {half, -half, half},
-        {half, half, half},
-        {-half, half, half},
-        k_axis_z,
-        color
-    );
-    push_face(
-        mesh,
-        {half, -half, -half},
-        {-half, -half, -half},
-        {-half, half, -half},
-        {half, half, -half},
-        -k_axis_z,
-        color
-    );
-    push_face(
-        mesh,
-        {half, -half, half},
-        {half, -half, -half},
-        {half, half, -half},
-        {half, half, half},
-        k_axis_x,
-        color
-    );
-    push_face(
-        mesh,
-        {-half, -half, -half},
-        {-half, -half, half},
-        {-half, half, half},
-        {-half, half, -half},
-        -k_axis_x,
-        color
-    );
-    push_face(
-        mesh,
-        {-half, half, half},
-        {half, half, half},
-        {half, half, -half},
-        {-half, half, -half},
-        k_axis_y,
-        color
-    );
-    push_face(
-        mesh,
-        {-half, -half, -half},
-        {half, -half, -half},
-        {half, -half, half},
-        {-half, -half, half},
-        -k_axis_y,
-        color
-    );
-
-    return mesh;
+    return scaled_colored_mesh(k_unit_cube_vertices, k_unit_cube_indices, side_length, color);
 }
 
 auto make_uv_sphere(const UvSphereConfig& config) -> MeshData
