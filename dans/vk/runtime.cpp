@@ -561,7 +561,7 @@ light_view_projection_matrix(const LightConfig& light, const Camera& camera) noe
             static_cast<f32>(std::max(1u, shadow_resolution)),
         };
     }
-    for (auto i = 0zu; i < std::min(lights.size(), k_max_lights); ++i)
+    for (auto i = 0zu; i < lights.size() and i < k_max_lights; ++i)
     {
         lighting.lights[i] = to_gpu_light(lights[i], i == shadow_index);
     }
