@@ -1,7 +1,6 @@
-#include "dans/mesh_io/gltf.hpp"
-
 #include "dans/image/image.hpp"
 #include "dans/linalg/linalg.hpp"
+#include "dans/mesh_io/gltf.hpp"
 
 #include <algorithm>
 #include <array>
@@ -317,9 +316,11 @@ auto write_gltf_scene(
         Vec3 max_position{std::numeric_limits<f32>::lowest()};
         for (const auto& vertex : mesh.vertices)
         {
-            positions.push_back({vertex.position.x, vertex.position.y, vertex.position.z});
-            normals.push_back({vertex.normal.x, vertex.normal.y, vertex.normal.z});
-            texcoords.push_back({vertex.texcoord.x, vertex.texcoord.y});
+            positions.push_back(
+                {.x = vertex.position.x, .y = vertex.position.y, .z = vertex.position.z}
+            );
+            normals.push_back({.x = vertex.normal.x, .y = vertex.normal.y, .z = vertex.normal.z});
+            texcoords.push_back({.x = vertex.texcoord.x, .y = vertex.texcoord.y});
             min_position = glm::min(min_position, vertex.position);
             max_position = glm::max(max_position, vertex.position);
         }
