@@ -25,7 +25,7 @@ enum class Shape2DType : u32
 // Most users push these via DrawList::rect / circle / line_2d / sector.
 struct Shape2DInstance
 {
-    Vec4 bounds{};        // x, y, w, h - top-left + size in world units
+    Vec4 bounds{};  // x, y, w, h - top-left + size in world units
     Vec4 fill_color{};
     Vec4 stroke_color{};
     Vec4 params0{};
@@ -36,13 +36,17 @@ struct Shape2DInstance
     f32 pad1_{};
 };
 
+// Sentinel values so call sites read intent instead of a bare 0.0f.
+inline constexpr f32 k_no_stroke = 0.0f;
+inline constexpr f32 k_dash_disabled = 0.0f;
+
 struct RectConfig
 {
     Vec2 position{};
     Vec2 size{};
     Color fill_color{Color::white};
     Color stroke_color{Color::black};
-    f32 stroke_width{0.0f};
+    f32 stroke_width{k_no_stroke};
     f32 corner_radius{0.0f};
     f32 bevel_size{0.0f};
     bool screen_space{};
@@ -54,7 +58,7 @@ struct CircleConfig
     f32 radius{1.0f};
     Color fill_color{Color::white};
     Color stroke_color{Color::black};
-    f32 stroke_width{0.0f};
+    f32 stroke_width{k_no_stroke};
     bool screen_space{};
 };
 
@@ -64,8 +68,8 @@ struct Line2DConfig
     Vec2 end{};
     Color color{Color::white};
     f32 thickness{1.0f};
-    f32 dash_on{0.0f};
-    f32 dash_off{0.0f};
+    f32 dash_on{k_dash_disabled};
+    f32 dash_off{k_dash_disabled};
     f32 dash_offset{0.0f};
     bool screen_space{};
 };
@@ -79,7 +83,7 @@ struct SectorConfig
     f32 end_angle{2.0f * std::numbers::pi_v<f32>};
     Color fill_color{Color::white};
     Color stroke_color{Color::black};
-    f32 stroke_width{0.0f};
+    f32 stroke_width{k_no_stroke};
     bool screen_space{};
 };
 
@@ -90,9 +94,9 @@ struct BezierConfig
     Vec2 end{};
     Color color{Color::white};
     f32 thickness{1.0f};
-    f32 dash_on{0.0f};
-    f32 dash_off{0.0f};
-    u32 segments{32u};
+    f32 dash_on{k_dash_disabled};
+    f32 dash_off{k_dash_disabled};
+    usize segments{32zu};
     bool screen_space{};
 };
 

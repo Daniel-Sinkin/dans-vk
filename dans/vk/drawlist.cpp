@@ -3,6 +3,7 @@
 #include "dans/vk/drawlist.hpp"
 // StdLib
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <numbers>
 #include <span>
@@ -247,10 +248,7 @@ auto DrawList::text_screen(const TextScreenConfig& cfg) -> void
 
 auto DrawList::rect(const RectConfig& cfg) -> void
 {
-    if (cfg.size.x <= 0.0f or cfg.size.y <= 0.0f)
-    {
-        return;
-    }
+    assert(cfg.size.x > 0.0f and cfg.size.y > 0.0f);
     auto& list = cfg.screen_space ? screen_shapes_ : world_shapes_;
     list.push_back(
         Shape2DInstance{
@@ -267,16 +265,13 @@ auto DrawList::rect(const RectConfig& cfg) -> void
 
 auto DrawList::circle(const CircleConfig& cfg) -> void
 {
-    if (cfg.radius <= 0.0f)
-    {
-        return;
-    }
+    assert(cfg.radius > 0.0f);
     const auto diameter = 2.0f * cfg.radius;
     auto& list = cfg.screen_space ? screen_shapes_ : world_shapes_;
     list.push_back(
         Shape2DInstance{
-            .bounds
-            = Vec4{cfg.center.x - cfg.radius, cfg.center.y - cfg.radius, diameter, diameter},
+            .bounds =
+                Vec4{cfg.center.x - cfg.radius, cfg.center.y - cfg.radius, diameter, diameter},
             .fill_color = to_vec4(cfg.fill_color),
             .stroke_color = to_vec4(cfg.stroke_color),
             .params0 = Vec4{0.0f, 0.0f, cfg.stroke_width, 0.0f},
@@ -289,23 +284,25 @@ auto DrawList::circle(const CircleConfig& cfg) -> void
 
 auto DrawList::line_2d(const Line2DConfig& cfg) -> void
 {
-    if (cfg.thickness <= 0.0f)
-    {
-        return;
-    }
+    assert(cfg.thickness > 0.0f);
+    assert(cfg.dash_on >= 0.0f and cfg.dash_off >= 0.0f);
+    assert((cfg.dash_on != k_dash_disabled) == (cfg.dash_off != k_dash_disabled));
     const auto pad = cfg.thickness * 0.5f + 1.0f;
     const auto min_x = std::min(cfg.start.x, cfg.end.x) - pad;
     const auto min_y = std::min(cfg.start.y, cfg.end.y) - pad;
     const auto max_x = std::max(cfg.start.x, cfg.end.x) + pad;
     const auto max_y = std::max(cfg.start.y, cfg.end.y) + pad;
-    const auto dashed = (cfg.dash_on > 0.0f and cfg.dash_off > 0.0f);
+    const auto dashed = (cfg.dash_on != k_dash_disabled);
     auto& list = cfg.screen_space ? screen_shapes_ : world_shapes_;
     list.push_back(
         Shape2DInstance{
             .bounds = Vec4{min_x, min_y, max_x - min_x, max_y - min_y},
             .fill_color = to_vec4(cfg.color),
             .stroke_color = Vec4{0.0f},
-            .params0 = Vec4{cfg.start.x - min_x, cfg.start.y - min_y, cfg.end.x - min_x, cfg.end.y - min_y},
+            .params0 =
+                Vec4{
+                    cfg.start.x - min_x, cfg.start.y - min_y, cfg.end.x - min_x, cfg.end.y - min_y
+                },
             .params1 = Vec4{cfg.thickness, cfg.dash_on, cfg.dash_off, cfg.dash_offset},
             .shape_type = static_cast<u32>(Shape2DType::line),
             .flags = dashed ? k_shape_flag_dashed : 0u,
@@ -315,20 +312,18 @@ auto DrawList::line_2d(const Line2DConfig& cfg) -> void
 
 auto DrawList::sector(const SectorConfig& cfg) -> void
 {
-    if (cfg.outer_radius <= 0.0f)
-    {
-        return;
-    }
+    assert(cfg.outer_radius > 0.0f);
     const auto diameter = 2.0f * cfg.outer_radius;
     auto& list = cfg.screen_space ? screen_shapes_ : world_shapes_;
     list.push_back(
         Shape2DInstance{
-            .bounds = Vec4{
-                cfg.center.x - cfg.outer_radius,
-                cfg.center.y - cfg.outer_radius,
-                diameter,
-                diameter,
-            },
+            .bounds =
+                Vec4{
+                    cfg.center.x - cfg.outer_radius,
+                    cfg.center.y - cfg.outer_radius,
+                    diameter,
+                    diameter,
+                },
             .fill_color = to_vec4(cfg.fill_color),
             .stroke_color = to_vec4(cfg.stroke_color),
             .params0 = Vec4{cfg.inner_radius, cfg.outer_radius, cfg.start_angle, cfg.end_angle},
@@ -341,23 +336,19 @@ auto DrawList::sector(const SectorConfig& cfg) -> void
 
 auto DrawList::bezier(const BezierConfig& cfg) -> void
 {
-    if (cfg.thickness <= 0.0f or cfg.segments == 0u)
-    {
-        return;
-    }
+    assert(cfg.thickness > 0.0f);
+    assert(cfg.segments > 0zu);
     const auto step = 1.0f / static_cast<f32>(cfg.segments);
-    Vec2 previous = cfg.start;
-    f32 cumulative_arc = 0.0f;
-    for (auto i = 1u; i <= cfg.segments; ++i)
+    auto previous = cfg.start;
+    auto cumulative_arc = 0.0f;
+    for (auto i = 0zu; i < cfg.segments; ++i)
     {
-        const auto t = static_cast<f32>(i) * step;
+        const auto t = static_cast<f32>(i + 1zu) * step;
         const auto one_minus_t = 1.0f - t;
-        const Vec2 next{
-            one_minus_t * one_minus_t * cfg.start.x + 2.0f * one_minus_t * t * cfg.control.x
-                + t * t * cfg.end.x,
-            one_minus_t * one_minus_t * cfg.start.y + 2.0f * one_minus_t * t * cfg.control.y
-                + t * t * cfg.end.y,
-        };
+        const auto w_start = one_minus_t * one_minus_t;
+        const auto w_control = 2.0f * one_minus_t * t;
+        const auto w_end = t * t;
+        const auto next = w_start * cfg.start + w_control * cfg.control + w_end * cfg.end;
         line_2d(
             Line2DConfig{
                 .start = previous,
@@ -370,9 +361,7 @@ auto DrawList::bezier(const BezierConfig& cfg) -> void
                 .screen_space = cfg.screen_space,
             }
         );
-        const auto dx = next.x - previous.x;
-        const auto dy = next.y - previous.y;
-        cumulative_arc += std::sqrt(dx * dx + dy * dy);
+        cumulative_arc += glm::distance(previous, next);
         previous = next;
     }
 }
