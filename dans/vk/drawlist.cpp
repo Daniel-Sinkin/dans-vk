@@ -86,18 +86,17 @@ auto DrawList::debug_line(const DebugLineConfig& cfg) -> void
 
 auto DrawList::debug_arrow(const DebugArrowConfig& cfg) -> void
 {
-    const auto safe_width = std::max(0.0f, cfg.width);
-    const auto min_length = std::max(1.0e-6f, k_debug_arrow_min_length_widths * safe_width);
-    if (glm::dot(cfg.vector, cfg.vector) < min_length * min_length)
-    {
-        return;
-    }
+    assert(cfg.width >= 0.0f);
+    const auto min_length = std::max(1.0e-6f, k_debug_arrow_min_length_widths * cfg.width);
+    const auto long_enough = glm::dot(cfg.vector, cfg.vector) >= min_length * min_length;
+    assert(long_enough);
+    if (not long_enough) return;
 
     auto& segments = cfg.draw_on_top ? debug_on_top_segments_ : debug_segments_;
     segments.push_back(
         DebugSegment{
             .start = cfg.origin,
-            .width = safe_width,
+            .width = cfg.width,
             .end = cfg.origin + cfg.vector,
             .arrow_tip = 1.0f,
             .color = cfg.color,
