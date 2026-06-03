@@ -171,7 +171,10 @@ target_include_directories(dans_mesh PUBLIC
 target_link_libraries(dans_mesh PUBLIC dans_geom dans_gfx dans_linalg)
 target_link_libraries(dans_mesh PRIVATE dans_vk_warnings)
 
-add_library(dans_image STATIC dans/image/image.cpp)
+add_library(dans_image STATIC
+  dans/image/image.cpp
+  dans/image/stb_image_impl.cpp
+)
 add_library(dans::image ALIAS dans_image)
 target_include_directories(dans_image PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>

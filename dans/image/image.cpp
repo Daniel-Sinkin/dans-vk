@@ -2,11 +2,7 @@
 //
 #include "dans/image/image.hpp"
 // Externals
-#define STB_IMAGE_STATIC
-#define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
-#define STB_IMAGE_WRITE_STATIC
-#define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
 // StdLib
 #include <format>
@@ -44,9 +40,11 @@ auto load_rgba_f32(const std::filesystem::path& path) -> ImageF
     auto* pixels = stbi_loadf(path.string().c_str(), &width, &height, &channels, STBI_rgb_alpha);
     if (pixels == nullptr)
     {
-        throw std::runtime_error(std::format(
-            "dans::image: failed to load HDR {}: {}", path.string(), stbi_failure_reason()
-        ));
+        throw std::runtime_error(
+            std::format(
+                "dans::image: failed to load HDR {}: {}", path.string(), stbi_failure_reason()
+            )
+        );
     }
     ImageF image{.width = static_cast<u32>(width), .height = static_cast<u32>(height)};
     const auto count = static_cast<usize>(width) * static_cast<usize>(height);
