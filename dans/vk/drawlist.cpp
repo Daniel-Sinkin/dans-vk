@@ -106,23 +106,20 @@ auto DrawList::debug_arrow(const DebugArrowConfig& cfg) -> void
 
 auto DrawList::debug_sphere(const DebugSphereConfig& cfg) -> void
 {
-    const auto safe_radius = std::max(0.0f, cfg.radius);
-    if (safe_radius <= 0.0f)
-    {
-        return;
-    }
+    assert(cfg.radius > 0.0f);
+    assert(cfg.segments >= 8u);
+    if (cfg.radius <= 0.0f or cfg.segments < 8u) return;
 
-    const auto safe_segments = std::max(8u, cfg.segments);
-    const auto safe_segments_f = static_cast<f32>(safe_segments);
-    for (auto i = 0u; i < safe_segments; ++i)
+    const auto segments_f = static_cast<f32>(cfg.segments);
+    for (auto i = 0u; i < cfg.segments; ++i)
     {
         const auto pi2 = 2.0f * std::numbers::pi_v<f32>;
-        const auto t0 = pi2 * static_cast<f32>(i) / safe_segments_f;
-        const auto t1 = pi2 * static_cast<f32>(i + 1u) / safe_segments_f;
-        const auto c0 = std::cos(t0) * safe_radius;
-        const auto s0 = std::sin(t0) * safe_radius;
-        const auto c1 = std::cos(t1) * safe_radius;
-        const auto s1 = std::sin(t1) * safe_radius;
+        const auto t0 = pi2 * static_cast<f32>(i) / segments_f;
+        const auto t1 = pi2 * static_cast<f32>(i + 1u) / segments_f;
+        const auto c0 = std::cos(t0) * cfg.radius;
+        const auto s0 = std::sin(t0) * cfg.radius;
+        const auto c1 = std::cos(t1) * cfg.radius;
+        const auto s1 = std::sin(t1) * cfg.radius;
         debug_line(
             DebugLineConfig{
                 .start = cfg.center + Vec3{c0, s0, 0.0f},
