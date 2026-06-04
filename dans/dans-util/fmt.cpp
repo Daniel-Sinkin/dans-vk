@@ -21,8 +21,8 @@ namespace
 [[nodiscard]] def format_bytes_with(
     u64 bytes, f64 divisor, const std::array<std::string_view, 7>& suffixes) -> std::string
 {
-    mut auto value = static_cast<f64>(bytes);
-    mut auto index = 0zu;
+    auto value = static_cast<f64>(bytes);
+    auto index = 0zu;
     while (value >= divisor and index + 1 < suffixes.size())
     {
         value /= divisor;
@@ -30,7 +30,7 @@ namespace
     }
     if (index == 0) return std::format("{} {}", bytes, suffixes[0]);
 
-    mut auto formatted = std::format("{:.2f}", value);
+    auto formatted = std::format("{:.2f}", value);
     while (formatted.back() == '0') formatted.pop_back();
     if (formatted.back() == '.') formatted.pop_back();
     return std::format("{} {}", formatted, suffixes[index]);
@@ -55,14 +55,14 @@ namespace
 {
     constexpr auto bytes_per_line = 16zu;
 
-    mut std::string out{};
+    std::string out{};
     out.reserve((bytes.size() / bytes_per_line + 1) * 80);
 
-    for (mut auto offset = 0zu; offset < bytes.size(); offset += bytes_per_line)
+    for (auto offset = 0zu; offset < bytes.size(); offset += bytes_per_line)
     {
         std::format_to(std::back_inserter(out), "{:08x}  ", offset);
 
-        for (mut auto i = 0zu; i < bytes_per_line; ++i)
+        for (auto i = 0zu; i < bytes_per_line; ++i)
         {
             if (offset + i < bytes.size())
             {
@@ -79,7 +79,7 @@ namespace
         }
 
         out += " |";
-        for (mut auto i = 0zu; i < bytes_per_line; ++i)
+        for (auto i = 0zu; i < bytes_per_line; ++i)
         {
             if (offset + i >= bytes.size()) break;
             const auto b = static_cast<u8>(bytes[offset + i]);

@@ -45,8 +45,8 @@ template <std::ranges::input_range R>
     requires std::convertible_to<std::ranges::range_value_t<R>, std::string_view>
 [[nodiscard]] def join(R&& range, std::string_view sep) -> std::string
 {
-    mut std::string out{};
-    mut auto first = true;
+    std::string out{};
+    auto first = true;
     for (const std::string_view part : range)
     {
         if (not first) out += sep;

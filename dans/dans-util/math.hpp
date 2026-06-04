@@ -1,7 +1,7 @@
 // dans/dans-util/math.hpp
 // Externals
 #include "dans/dans-core/development_markers.hpp"
-#include "dans/dans-core/types.hpp"  // IWYU pragma: keep
+#include "dans/dans-core/types.hpp"
 // StdLib
 #include <algorithm>
 #include <cassert>
@@ -15,7 +15,7 @@
 
 #pragma once
 #ifndef DANS_MATH_HPP
-#    define DANS_MATH_HPP
+#define DANS_MATH_HPP
 
 namespace dans::math
 {
@@ -69,8 +69,7 @@ template <std::floating_point T>
     T a,
     T b,
     T abs_eps = std::numeric_limits<T>::epsilon() * T{100},
-    T rel_eps = std::numeric_limits<T>::epsilon() * T{100}
-) -> bool
+    T rel_eps = std::numeric_limits<T>::epsilon() * T{100}) -> bool
 {
     if (a == b) return true;
     const auto diff = (a > b) ? (a - b) : (b - a);
@@ -81,8 +80,8 @@ template <std::floating_point T>
 }
 
 template <std::floating_point T>
-[[nodiscard]] constexpr def almost_zero(T x, T eps = std::numeric_limits<T>::epsilon() * T{100})
-    -> bool
+[[nodiscard]] constexpr def almost_zero(
+    T x, T eps = std::numeric_limits<T>::epsilon() * T{100}) -> bool
 {
     return ((x < T{0}) ? -x : x) <= eps;
 }
@@ -124,7 +123,6 @@ template <std::ranges::input_range R>
     const auto total = std::ranges::fold_left(values, f64{0}, std::plus{});
     return total / static_cast<f64>(std::ranges::distance(values));
 }
-
 }  // namespace dans::math
 
 #endif  // DANS_MATH_HPP

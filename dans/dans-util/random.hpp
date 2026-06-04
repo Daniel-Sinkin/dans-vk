@@ -9,7 +9,7 @@
 
 #pragma once
 #ifndef DANS_RANDOM_HPP
-#    define DANS_RANDOM_HPP
+#define DANS_RANDOM_HPP
 
 namespace dans::random
 {

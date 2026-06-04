@@ -12,7 +12,7 @@ namespace dans::random
 {
 [[nodiscard]] def rng() -> std::mt19937_64&
 {
-    mut_unchecked thread_local std::mt19937_64 engine{std::random_device{}()};
+    thread_local std::mt19937_64 engine{std::random_device{}()};
     return engine;
 }
 

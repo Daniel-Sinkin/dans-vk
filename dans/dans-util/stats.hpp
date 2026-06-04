@@ -2,7 +2,6 @@
 // Externals
 #include "dans/dans-core/development_markers.hpp"
 #include "dans/dans-core/types.hpp"
-#include "dans/dans-util/math.hpp"
 // StdLib
 #include <algorithm>
 #include <cmath>
@@ -14,7 +13,7 @@
 
 #pragma once
 #ifndef DANS_STATS_HPP
-#    define DANS_STATS_HPP
+#define DANS_STATS_HPP
 
 namespace dans::stats
 {
@@ -35,21 +34,24 @@ template <typename T>
     requires std::is_arithmetic_v<T>
 [[nodiscard]] def summarize(std::span<const T> values) -> Summary
 {
-    using std::views::transform;
     if (values.empty()) return Summary{};
 
-    const auto sorted = [&]() -> std::vector<f64>
-    {
-        const auto to_f64 = [&](auto x) { return static_cast<f64>(x); };
-        auto v = values | transform(to_f64) | std::ranges::to<std::vector<f64>>();
-        std::ranges::sort(v);
-        return v;
-    }();
+    std::vector<f64> sorted{};
+    sorted.reserve(values.size());
+    for (const auto v : values) sorted.push_back(static_cast<f64>(v));
+    std::ranges::sort(sorted);
 
-    const auto avg = math::mean(sorted);
-    const auto variance =
-        math::mean(sorted | transform([avg](auto v) { return (v - avg) * (v - avg); }));
-    const auto stddev = std::sqrt(variance);
+    auto sum = 0.0;
+    for (const auto v : sorted) sum += v;
+    const auto mean = sum / static_cast<f64>(sorted.size());
+
+    auto sq_sum = 0.0;
+    for (const auto v : sorted)
+    {
+        const auto d = v - mean;
+        sq_sum += d * d;
+    }
+    const auto stddev = std::sqrt(sq_sum / static_cast<f64>(sorted.size()));
 
     const auto percentile = [&](f64 p) -> f64
     {
@@ -63,7 +65,7 @@ template <typename T>
 
     return Summary{
         .count = sorted.size(),
-        .mean = avg,
+        .mean = mean,
         .min = sorted.front(),
         .max = sorted.back(),
         .median = percentile(0.5),

@@ -12,8 +12,8 @@ namespace dans::str
 {
 [[nodiscard]] def split(std::string_view text, char delim) -> std::vector<std::string_view>
 {
-    mut std::vector<std::string_view> out{};
-    mut auto left = 0zu;
+    std::vector<std::string_view> out{};
+    auto left = 0zu;
     while (true)
     {
         const auto pos = text.find(delim, left);

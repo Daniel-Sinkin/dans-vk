@@ -7,7 +7,7 @@
 
 namespace dans::util
 {
-inline constexpr auto version = "0.1.0";
+inline constexpr auto version = "0.2.0";
 }  // namespace dans::util
 
 #endif  // DANS_UTIL_HPP

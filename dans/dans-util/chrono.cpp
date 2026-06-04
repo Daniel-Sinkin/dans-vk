@@ -25,7 +25,7 @@ namespace dans::chrono
     constexpr Msec::rep ms_per_hour{ms_per_minute * 60};
     constexpr Msec::rep ms_per_day{ms_per_hour * 24};
 
-    mut auto remaining = std::chrono::duration_cast<Msec>(positive_duration).count();
+    auto remaining = std::chrono::duration_cast<Msec>(positive_duration).count();
 
     const auto days = remaining / ms_per_day;
     remaining %= ms_per_day;
@@ -36,8 +36,8 @@ namespace dans::chrono
     const auto seconds = remaining / ms_per_second;
     const auto milliseconds = remaining % ms_per_second;
 
-    mut std::string result{};
-    mut auto started = false;
+    std::string result{};
+    auto started = false;
 
     const auto append_time_unit = [&](Msec::rep value, std::string_view name) -> void
     {
