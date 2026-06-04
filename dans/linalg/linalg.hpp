@@ -20,13 +20,13 @@ inline constexpr Vec3 k_axis_x{1.0f, 0.0f, 0.0f};
 inline constexpr Vec3 k_axis_y{0.0f, 1.0f, 0.0f};
 inline constexpr Vec3 k_axis_z{0.0f, 0.0f, 1.0f};
 inline constexpr Quat k_quat_identity{1.0f, 0.0f, 0.0f, 0.0f};
-// glm's scalar matrix ctor fills the diagonal: this is the identity, not all-ones.
 inline constexpr Mat4 k_mat4_identity{1.0f};
 
-[[nodiscard]] inline auto normalize_or(Vec3 value, Vec3 fallback) noexcept -> Vec3
+[[nodiscard]] inline auto normalize_or(Vec3 value, Vec3 fallback, f32 eps = 1.0e-12f) noexcept
+    -> Vec3
 {
     const auto length_squared = glm::dot(value, value);
-    if (length_squared <= 1.0e-12f)
+    if (length_squared <= eps)
     {
         return glm::normalize(fallback);
     }

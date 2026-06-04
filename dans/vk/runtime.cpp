@@ -1,8 +1,6 @@
 #include "dans/vk/runtime.hpp"
 
-#include "dans/dans-core/development_markers.hpp"
 #include "dans/font/font_atlas.hpp"
-#include "dans/geom/geometry.hpp"
 #include "dans/image/image.hpp"
 #include "dans/vk/shape_draw.hpp"
 
@@ -27,6 +25,7 @@
 #include <limits>
 #include <numbers>
 #include <optional>
+#include <source_location>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -337,11 +336,14 @@ auto to_gpu_material(
     Vec3 camera_forward
 ) noexcept -> GpuMaterial
 {
-    auto debug_mode = debug.mode;
-    if (debug.selected and debug_mode == MeshDebugMode::none)
+    const auto debug_mode = [&debug]
     {
-        debug_mode = MeshDebugMode::selected_pulse;
-    }
+        if (debug.selected and debug.mode == MeshDebugMode::none)
+        {
+            return MeshDebugMode::selected_pulse;
+        }
+        return debug.mode;
+    }();
     return GpuMaterial{
         .base_color = to_vec4(material.base_color),
         .emissive_color = to_vec4(material.emissive_color),
@@ -369,7 +371,7 @@ auto to_gpu_material(
         .debug_color = to_vec4(debug.color),
         .debug_params =
             Vec4{
-                static_cast<f32>(debug_mode),
+                static_cast<f32>(std::to_underlying(debug_mode)),
                 debug.scalar,
                 debug.scalar_range.x,
                 debug.scalar_range.y,
@@ -568,12 +570,20 @@ light_view_projection_matrix(const LightConfig& light, const Camera& camera) noe
     return lighting;
 }
 
-auto check_vk_result(const VkResult result) -> void
+auto check_vk_result(
+    const VkResult result, const std::source_location loc = std::source_location::current()
+) -> void
 {
     if (result != VK_SUCCESS)
     {
         throw std::runtime_error(
-            std::format("Vulkan call failed with VkResult {}", static_cast<int>(result))
+            std::format(
+                "Vulkan call failed with VkResult {} at {}:{} in {}",
+                static_cast<int>(result),
+                loc.file_name(),
+                loc.line(),
+                loc.function_name()
+            )
         );
     }
 }
@@ -697,6 +707,9 @@ auto find_depth_format(VkPhysicalDevice physical_device) -> VkFormat
 
 struct Runtime::Impl
 {
+    using Clock = std::chrono::steady_clock;
+    using TimePoint = std::chrono::time_point<Clock>;
+
     explicit Impl(RuntimeConfig cfg) : config(std::move(cfg))
     {
     }
@@ -722,10 +735,14 @@ struct Runtime::Impl
     u32 vulkan_api_version{VK_API_VERSION_1_2};
     bool swapchain_rebuild{};
     VkFormat depth_format{VK_FORMAT_UNDEFINED};
+
     std::vector<DepthAttachment> depth_attachments;
+
     VkDescriptorSetLayout mesh_descriptor_set_layout{VK_NULL_HANDLE};
     VkDescriptorPool mesh_descriptor_pool{VK_NULL_HANDLE};
-    std::vector<VkDescriptorSet> mesh_descriptor_sets;
+
+    std::vector<VkDescriptorSet> mesh_descriptor_sets{};
+
     VkPipelineLayout mesh_pipeline_layout{VK_NULL_HANDLE};
     VkPipeline environment_pipeline{VK_NULL_HANDLE};
     VkPipeline mesh_pipeline{VK_NULL_HANDLE};
@@ -738,48 +755,67 @@ struct Runtime::Impl
     VkPipelineLayout debug_pipeline_layout{VK_NULL_HANDLE};
     VkPipeline debug_pipeline{VK_NULL_HANDLE};
     VkPipeline debug_on_top_pipeline{VK_NULL_HANDLE};
+
     VkDescriptorSetLayout text_descriptor_set_layout{VK_NULL_HANDLE};
     VkDescriptorPool text_descriptor_pool{VK_NULL_HANDLE};
     VkDescriptorSet text_descriptor_set{VK_NULL_HANDLE};
     VkPipelineLayout text_pipeline_layout{VK_NULL_HANDLE};
     VkPipeline text_pipeline{VK_NULL_HANDLE};
+
     TextureResource text_atlas{};
     BakedFont text_font{};
     bool text_font_loaded{};
     std::vector<Buffer> text_instance_buffers{};
     std::vector<TextInstance> text_instance_scratch{};
+
     VkPipelineLayout shape_pipeline_layout{VK_NULL_HANDLE};
     VkPipeline shape_pipeline{VK_NULL_HANDLE};
+
     std::vector<Buffer> shape_instance_buffers{};
+
     Vec2 camera_2d_pivot{};
     f32 camera_2d_zoom{1.0f};
+
     ShadowMap shadow_map{};
-    std::vector<MeshResource> meshes;
-    std::deque<RetiredMeshResource> retired_meshes;
-    std::vector<TextureResource> textures;
-    std::vector<Buffer> debug_segment_buffers;
-    std::vector<Buffer> debug_on_top_segment_buffers;
-    std::vector<Buffer> mesh_material_buffers;
-    std::vector<Buffer> mesh_instance_buffers;
-    std::vector<Buffer> mesh_lighting_buffers;
-    std::vector<GpuMaterial> mesh_material_upload;
-    std::vector<GpuMeshInstance> mesh_instance_upload;
-    std::vector<usize> mesh_visible_indices;
-    std::vector<MeshBatch> mesh_batches;
+
+    std::vector<MeshResource> meshes{};
+    std::deque<RetiredMeshResource> retired_meshes{};
+
+    std::vector<TextureResource> textures{};
+
+    std::vector<Buffer> debug_segment_buffers{};
+    std::vector<Buffer> debug_on_top_segment_buffers{};
+    std::vector<Buffer> mesh_material_buffers{};
+    std::vector<Buffer> mesh_instance_buffers{};
+    std::vector<Buffer> mesh_lighting_buffers{};
+
+    std::vector<GpuMaterial> mesh_material_upload{};
+    std::vector<GpuMeshInstance> mesh_instance_upload{};
+    std::vector<usize> mesh_visible_indices{};
+    std::vector<MeshBatch> mesh_batches{};
+
     GpuLighting mesh_lighting_upload{};
+
     DrawList draw_list{};
+
     InputState input{};
-    std::filesystem::path pending_screenshot;
+
+    std::filesystem::path pending_screenshot{};
+
     std::optional<FrameContext> active_frame;
+
     const ImGui_ImplVulkanH_Frame* active_window_frame{};
     SwapchainCapture active_capture{};
-    std::chrono::steady_clock::time_point previous_frame_time{};
-    std::chrono::steady_clock::time_point frame_begin_cpu{};
-    std::chrono::steady_clock::time_point frame_update_begin_cpu{};
-    std::chrono::steady_clock::time_point frame_update_end_cpu{};
-    std::chrono::steady_clock::time_point frame_ui_end_cpu{};
-    std::chrono::steady_clock::time_point render_begin_cpu{};
+
+    TimePoint previous_frame_time{};
+    TimePoint frame_begin_cpu{};
+    TimePoint frame_update_begin_cpu{};
+    TimePoint frame_update_end_cpu{};
+    TimePoint frame_ui_end_cpu{};
+    TimePoint render_begin_cpu{};
+
     bool pending_screenshot_transparent{};
+
     bool imgui_ready{};
     bool sdl_ready{};
     bool initialized{};
@@ -924,18 +960,13 @@ auto Runtime::Impl::create_buffer(
 
     VmaAllocationCreateInfo allocation_info{};
     allocation_info.usage = memory_usage;
-    if (mapped)
-    {
-        allocation_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
-                                | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-    }
-    else
-    {
-        allocation_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-    }
+    allocation_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+    if (mapped) allocation_info.flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
     VmaAllocationInfo allocation_result{};
+
     Buffer buffer{.capacity = buffer_info.size};
+
     check_vk_result(vmaCreateBuffer(
         vma_allocator,
         &buffer_info,
@@ -2601,7 +2632,7 @@ auto Runtime::Impl::setup_imgui() -> void
     init_info.PipelineInfoMain.RenderPass = window_data.RenderPass;
     init_info.PipelineInfoMain.Subpass = 0;
     init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-    init_info.CheckVkResultFn = check_vk_result;
+    init_info.CheckVkResultFn = [](VkResult result) { check_vk_result(result); };
     if (!ImGui_ImplVulkan_Init(&init_info))
     {
         throw std::runtime_error("failed to initialize ImGui Vulkan backend");
@@ -3436,108 +3467,57 @@ auto Runtime::Impl::create_pipelines() -> void
 
 auto Runtime::Impl::destroy_pipelines() noexcept -> void
 {
-    if (shape_pipeline != VK_NULL_HANDLE)
+    const auto destroy_pipeline = [&](VkPipeline& pipeline)
     {
-        vkDestroyPipeline(device, shape_pipeline, allocation_callbacks);
-        shape_pipeline = VK_NULL_HANDLE;
-    }
-    if (shape_pipeline_layout != VK_NULL_HANDLE)
+        if (pipeline == VK_NULL_HANDLE) return;
+        vkDestroyPipeline(device, pipeline, allocation_callbacks);
+        pipeline = VK_NULL_HANDLE;
+    };
+    const auto destroy_pipeline_layout = [&](VkPipelineLayout& pipeline_layout)
     {
-        vkDestroyPipelineLayout(device, shape_pipeline_layout, allocation_callbacks);
-        shape_pipeline_layout = VK_NULL_HANDLE;
-    }
-    if (text_pipeline != VK_NULL_HANDLE)
+        if (pipeline_layout == VK_NULL_HANDLE) return;
+        vkDestroyPipelineLayout(device, pipeline_layout, allocation_callbacks);
+        pipeline_layout = VK_NULL_HANDLE;
+    };
+    const auto destroy_descriptor_pool = [&](VkDescriptorPool pool)
     {
-        vkDestroyPipeline(device, text_pipeline, allocation_callbacks);
-        text_pipeline = VK_NULL_HANDLE;
-    }
-    if (text_pipeline_layout != VK_NULL_HANDLE)
-    {
-        vkDestroyPipelineLayout(device, text_pipeline_layout, allocation_callbacks);
-        text_pipeline_layout = VK_NULL_HANDLE;
-    }
-    text_descriptor_set = VK_NULL_HANDLE;
-    if (text_descriptor_pool != VK_NULL_HANDLE)
-    {
-        vkDestroyDescriptorPool(device, text_descriptor_pool, allocation_callbacks);
+        if (pool == VK_NULL_HANDLE) return;
+        vkDestroyDescriptorPool(device, pool, allocation_callbacks);
         text_descriptor_pool = VK_NULL_HANDLE;
-    }
-    if (text_descriptor_set_layout != VK_NULL_HANDLE)
+    };
+    const auto destroy_descriptor_set_layout = [&](VkDescriptorSetLayout layout)
     {
-        vkDestroyDescriptorSetLayout(device, text_descriptor_set_layout, allocation_callbacks);
+        if (layout == VK_NULL_HANDLE) return;
+        vkDestroyDescriptorSetLayout(device, layout, allocation_callbacks);
         text_descriptor_set_layout = VK_NULL_HANDLE;
-    }
-    if (debug_on_top_pipeline != VK_NULL_HANDLE)
-    {
-        vkDestroyPipeline(device, debug_on_top_pipeline, allocation_callbacks);
-        debug_on_top_pipeline = VK_NULL_HANDLE;
-    }
-    if (debug_pipeline != VK_NULL_HANDLE)
-    {
-        vkDestroyPipeline(device, debug_pipeline, allocation_callbacks);
-        debug_pipeline = VK_NULL_HANDLE;
-    }
-    if (debug_pipeline_layout != VK_NULL_HANDLE)
-    {
-        vkDestroyPipelineLayout(device, debug_pipeline_layout, allocation_callbacks);
-        debug_pipeline_layout = VK_NULL_HANDLE;
-    }
-    if (shadow_pipeline != VK_NULL_HANDLE)
-    {
-        vkDestroyPipeline(device, shadow_pipeline, allocation_callbacks);
-        shadow_pipeline = VK_NULL_HANDLE;
-    }
-    if (shadow_position_normal_pipeline != VK_NULL_HANDLE)
-    {
-        vkDestroyPipeline(device, shadow_position_normal_pipeline, allocation_callbacks);
-        shadow_position_normal_pipeline = VK_NULL_HANDLE;
-    }
-    if (shadow_quantized_position_pipeline != VK_NULL_HANDLE)
-    {
-        vkDestroyPipeline(device, shadow_quantized_position_pipeline, allocation_callbacks);
-        shadow_quantized_position_pipeline = VK_NULL_HANDLE;
-    }
-    if (shadow_pipeline_layout != VK_NULL_HANDLE)
-    {
-        vkDestroyPipelineLayout(device, shadow_pipeline_layout, allocation_callbacks);
-        shadow_pipeline_layout = VK_NULL_HANDLE;
-    }
-    if (mesh_pipeline != VK_NULL_HANDLE)
-    {
-        vkDestroyPipeline(device, mesh_pipeline, allocation_callbacks);
-        mesh_pipeline = VK_NULL_HANDLE;
-    }
-    if (mesh_position_normal_pipeline != VK_NULL_HANDLE)
-    {
-        vkDestroyPipeline(device, mesh_position_normal_pipeline, allocation_callbacks);
-        mesh_position_normal_pipeline = VK_NULL_HANDLE;
-    }
-    if (mesh_quantized_position_normal_pipeline != VK_NULL_HANDLE)
-    {
-        vkDestroyPipeline(device, mesh_quantized_position_normal_pipeline, allocation_callbacks);
-        mesh_quantized_position_normal_pipeline = VK_NULL_HANDLE;
-    }
-    if (environment_pipeline != VK_NULL_HANDLE)
-    {
-        vkDestroyPipeline(device, environment_pipeline, allocation_callbacks);
-        environment_pipeline = VK_NULL_HANDLE;
-    }
-    if (mesh_pipeline_layout != VK_NULL_HANDLE)
-    {
-        vkDestroyPipelineLayout(device, mesh_pipeline_layout, allocation_callbacks);
-        mesh_pipeline_layout = VK_NULL_HANDLE;
-    }
+    };
+    destroy_pipeline(shape_pipeline);
+    destroy_pipeline_layout(shape_pipeline_layout);
+    destroy_pipeline(text_pipeline);
+    destroy_pipeline_layout(text_pipeline_layout);
+
+    text_descriptor_set = VK_NULL_HANDLE;
+    destroy_descriptor_pool(text_descriptor_pool);
+    destroy_descriptor_set_layout(text_descriptor_set_layout);
+
+    destroy_pipeline(debug_on_top_pipeline);
+    destroy_pipeline(debug_pipeline);
+    destroy_pipeline_layout(debug_pipeline_layout);
+
+    destroy_pipeline(shadow_pipeline);
+    destroy_pipeline(shadow_position_normal_pipeline);
+    destroy_pipeline(shadow_quantized_position_pipeline);
+    destroy_pipeline_layout(shadow_pipeline_layout);
+
+    destroy_pipeline(mesh_pipeline);
+    destroy_pipeline(mesh_position_normal_pipeline);
+    destroy_pipeline(mesh_quantized_position_normal_pipeline);
+    destroy_pipeline(environment_pipeline);
+    destroy_pipeline_layout(mesh_pipeline_layout);
+
     mesh_descriptor_sets.clear();
-    if (mesh_descriptor_pool != VK_NULL_HANDLE)
-    {
-        vkDestroyDescriptorPool(device, mesh_descriptor_pool, allocation_callbacks);
-        mesh_descriptor_pool = VK_NULL_HANDLE;
-    }
-    if (mesh_descriptor_set_layout != VK_NULL_HANDLE)
-    {
-        vkDestroyDescriptorSetLayout(device, mesh_descriptor_set_layout, allocation_callbacks);
-        mesh_descriptor_set_layout = VK_NULL_HANDLE;
-    }
+    destroy_descriptor_pool(mesh_descriptor_pool);
+    destroy_descriptor_set_layout(mesh_descriptor_set_layout);
 }
 
 auto Runtime::Impl::draw_shadow_map(const VkCommandBuffer command_buffer) -> void
@@ -3551,7 +3531,7 @@ auto Runtime::Impl::draw_shadow_map(const VkCommandBuffer command_buffer) -> voi
         if (shadow_quantized_position_pipeline != VK_NULL_HANDLE) return false;
         return true;
     }();
-    auto no_framebuffer = shadow_map.framebuffer == VK_NULL_HANDLE;
+    const auto no_framebuffer = (shadow_map.framebuffer == VK_NULL_HANDLE);
     if (mesh_commands.empty() or no_pipeline or no_framebuffer)
     {
         return;
@@ -3684,20 +3664,34 @@ auto Runtime::Impl::draw_environment(
     {
         return;
     }
-    const auto environment_mode =
-        show_hdri ? 0.0f : (environment.gradient_background ? 2.0f : 1.0f);
-    const auto aspect = static_cast<f32>(std::max(1u, extent.width))
-                        / static_cast<f32>(std::max(1u, extent.height));
+    const auto aspect = [&]
+    {
+        const auto width = static_cast<f32>(std::max(1u, extent.width));
+        const auto height = static_cast<f32>(std::max(1u, extent.height));
+        return width / height;
+    }();
+    const auto params = [&]() -> Vec4
+    {
+        if (!show_hdri)
+        {
+            return {
+                1.0f,
+                environment.rotation_radians,
+                0.0f,
+                environment.gradient_background ? 2.0f : 1.0f,
+            };
+        }
+        return {
+            environment.background_intensity,
+            environment.rotation_radians,
+            static_cast<f32>(environment.texture.id),
+            0.0f,
+        };
+    }();
     const EnvironmentPushConstants push{
         .inverse_view_projection = glm::inverse(camera.view_projection_matrix(aspect)),
         .camera_position = Vec4{camera.position(), 1.0f},
-        .params =
-            Vec4{
-                show_hdri ? environment.background_intensity : 1.0f,
-                environment.rotation_radians,
-                show_hdri ? static_cast<f32>(environment.texture.id) : 0.0f,
-                environment_mode,
-            },
+        .params = params,
         .background_color = to_vec4(environment.background_color),
         .background_top_color = to_vec4(environment.background_top_color),
     };
@@ -5347,10 +5341,7 @@ auto Runtime::Impl::end_main_pass() -> void
 
 auto Runtime::Impl::finish_imgui_without_rendering() -> void
 {
-    if (imgui_rendered)
-    {
-        return;
-    }
+    if (imgui_rendered) return;
     ImGui::EndFrame();
     imgui_rendered = true;
     frame_ui_end_cpu = std::chrono::steady_clock::now();
@@ -5397,17 +5388,14 @@ auto Runtime::Impl::end_frame() -> void
 
     present_frame();
     const auto frame_end_cpu = std::chrono::steady_clock::now();
+    const auto dt_to_f32 = [](auto dt) -> f32
+    { return std::chrono::duration<f32, std::milli>(dt).count(); };
 
     stats = RuntimeStats{
-        .last_frame_ms =
-            std::chrono::duration<f32, std::milli>(frame_end_cpu - frame_begin_cpu).count(),
-        .last_update_ms =
-            std::chrono::duration<f32, std::milli>(frame_update_end_cpu - frame_update_begin_cpu)
-                .count(),
-        .last_ui_ms =
-            std::chrono::duration<f32, std::milli>(frame_ui_end_cpu - frame_update_end_cpu).count(),
-        .last_render_ms =
-            std::chrono::duration<f32, std::milli>(render_end_cpu - render_begin_cpu).count(),
+        .last_frame_ms = dt_to_f32(frame_end_cpu - frame_begin_cpu),
+        .last_update_ms = dt_to_f32(frame_update_end_cpu - frame_update_begin_cpu),
+        .last_ui_ms = dt_to_f32(frame_ui_end_cpu - frame_update_end_cpu),
+        .last_render_ms = dt_to_f32(render_end_cpu - render_begin_cpu),
         .mesh_draws = static_cast<u32>(draw_list.mesh_commands().size()),
         .mesh_batches = static_cast<u32>(mesh_batches.size()),
         .debug_segments = static_cast<u32>(

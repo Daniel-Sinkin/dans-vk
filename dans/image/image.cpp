@@ -1,6 +1,8 @@
 // dans/image/image.cpp
 //
 #include "dans/image/image.hpp"
+
+#include "dans/dans-util/dev.hpp"
 // Externals
 #include <stb_image.h>
 #include <stb_image_write.h>
@@ -24,11 +26,12 @@ auto load_rgba8(const std::filesystem::path& path) -> Image8
             std::format("dans::image: failed to load {}: {}", path.string(), stbi_failure_reason())
         );
     }
+    dev::Defer _{[&pixels] { stbi_image_free(pixels); }};
+
     Image8 image{.width = static_cast<u32>(width), .height = static_cast<u32>(height)};
     const auto count = static_cast<usize>(width) * static_cast<usize>(height);
     const auto* typed = reinterpret_cast<const ColorU8*>(pixels);
     image.storage.assign(typed, typed + count);
-    stbi_image_free(pixels);
     return image;
 }
 
@@ -46,11 +49,12 @@ auto load_rgba_f32(const std::filesystem::path& path) -> ImageF
             )
         );
     }
+    dev::Defer _{[&pixels] { stbi_image_free(pixels); }};
+
     ImageF image{.width = static_cast<u32>(width), .height = static_cast<u32>(height)};
     const auto count = static_cast<usize>(width) * static_cast<usize>(height);
     const auto* typed = reinterpret_cast<const Color*>(pixels);
     image.storage.assign(typed, typed + count);
-    stbi_image_free(pixels);
     return image;
 }
 

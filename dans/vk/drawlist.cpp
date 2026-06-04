@@ -91,15 +91,13 @@ auto DrawList::debug_arrow(const DebugArrowConfig& cfg) -> void
     if (not valid) return;
 
     auto& segments = cfg.draw_on_top ? debug_on_top_segments_ : debug_segments_;
-    segments.push_back(
-        DebugSegment{
-            .start = cfg.origin,
-            .width = cfg.width,
-            .end = cfg.origin + cfg.vector,
-            .arrow_tip = 1.0f,
-            .color = cfg.color,
-        }
-    );
+    segments.push_back({
+        .start = cfg.origin,
+        .width = cfg.width,
+        .end = cfg.origin + cfg.vector,
+        .arrow_tip = 1.0f,
+        .color = cfg.color,
+    });
 }
 
 auto DrawList::debug_sphere(const DebugSphereConfig& cfg) -> void
@@ -150,57 +148,48 @@ auto DrawList::debug_sphere(const DebugSphereConfig& cfg) -> void
 
 auto DrawList::add_light(const LightConfig& cfg) -> void
 {
-    if (!cfg.enabled)
-    {
-        return;
-    }
+    if (!cfg.enabled) return;
     lights_.push_back(cfg);
 }
 
 auto DrawList::directional_light(const DirectionalLightConfig& cfg) -> void
 {
-    add_light(
-        LightConfig{
-            .type = LightType::directional,
-            .direction = cfg.direction,
-            .color = cfg.color,
-            .intensity = cfg.intensity,
-            .shadow = cfg.shadow,
-            .enabled = cfg.enabled,
-        }
-    );
+    add_light({
+        .type = LightType::directional,
+        .direction = cfg.direction,
+        .color = cfg.color,
+        .intensity = cfg.intensity,
+        .shadow = cfg.shadow,
+        .enabled = cfg.enabled,
+    });
 }
 
 auto DrawList::radial_light(const RadialLightConfig& cfg) -> void
 {
-    add_light(
-        LightConfig{
-            .type = LightType::radial,
-            .position = cfg.position,
-            .color = cfg.color,
-            .intensity = cfg.intensity,
-            .range = cfg.range,
-            .enabled = cfg.enabled,
-        }
-    );
+    add_light({
+        .type = LightType::radial,
+        .position = cfg.position,
+        .color = cfg.color,
+        .intensity = cfg.intensity,
+        .range = cfg.range,
+        .enabled = cfg.enabled,
+    });
 }
 
 auto DrawList::spot_light(const SpotLightConfig& cfg) -> void
 {
-    add_light(
-        LightConfig{
-            .type = LightType::spot,
-            .position = cfg.position,
-            .direction = cfg.direction,
-            .color = cfg.color,
-            .intensity = cfg.intensity,
-            .range = cfg.range,
-            .inner_cone_angle = cfg.inner_cone_angle,
-            .outer_cone_angle = cfg.outer_cone_angle,
-            .shadow = cfg.shadow,
-            .enabled = cfg.enabled,
-        }
-    );
+    add_light({
+        .type = LightType::spot,
+        .position = cfg.position,
+        .direction = cfg.direction,
+        .color = cfg.color,
+        .intensity = cfg.intensity,
+        .range = cfg.range,
+        .inner_cone_angle = cfg.inner_cone_angle,
+        .outer_cone_angle = cfg.outer_cone_angle,
+        .shadow = cfg.shadow,
+        .enabled = cfg.enabled,
+    });
 }
 
 auto DrawList::set_environment(const EnvironmentConfig& cfg) -> void
@@ -214,14 +203,12 @@ auto DrawList::text(const TextDrawConfig& cfg) -> void
     {
         return;
     }
-    world_text_commands_.push_back(
-        TextDrawCommand{
-            .position = cfg.position,
-            .text = std::string{cfg.text},
-            .color = cfg.color,
-            .size_scale = cfg.size_scale,
-        }
-    );
+    world_text_commands_.push_back({
+        .position = cfg.position,
+        .text = std::string{cfg.text},
+        .color = cfg.color,
+        .size_scale = cfg.size_scale,
+    });
 }
 
 auto DrawList::text_screen(const TextScreenConfig& cfg) -> void
@@ -230,14 +217,12 @@ auto DrawList::text_screen(const TextScreenConfig& cfg) -> void
     {
         return;
     }
-    screen_text_commands_.push_back(
-        TextDrawCommand{
-            .position = cfg.position,
-            .text = std::string{cfg.text},
-            .color = cfg.color,
-            .size_scale = cfg.size_scale,
-        }
-    );
+    screen_text_commands_.push_back({
+        .position = cfg.position,
+        .text = std::string{cfg.text},
+        .color = cfg.color,
+        .size_scale = cfg.size_scale,
+    });
 }
 
 auto DrawList::rect(const RectConfig& cfg) -> void

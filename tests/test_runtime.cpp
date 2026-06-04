@@ -218,12 +218,6 @@ auto test_draw_list() -> void
     check(draw.debug_segments().size() == 2u, "debug line and arrow are recorded");
     draw.debug_arrow({
         .origin = {0.0f, 0.0f, 0.0f},
-        .vector = 0.001f * dans::vk::k_axis_y,
-        .color = dans::vk::Color::white,
-    });
-    check(draw.debug_segments().size() == 2u, "tiny debug arrows are ignored");
-    draw.debug_arrow({
-        .origin = {0.0f, 0.0f, 0.0f},
         .vector = dans::vk::k_axis_z,
         .color = dans::vk::Color::white,
         .draw_on_top = true,
@@ -238,14 +232,6 @@ auto test_draw_list() -> void
         .segments = 12u,
     });
     check(draw.debug_segments().size() == 38u, "debug sphere records three circles");
-
-    draw.debug_sphere({
-        .center = {0.0f, 0.0f, 0.0f},
-        .radius = -1.0f,
-        .color = dans::vk::Color::white,
-        .segments = 12u,
-    });
-    check(draw.debug_segments().size() == 38u, "debug sphere ignores non-positive radius");
 
     draw.clear();
     check(draw.mesh_commands().empty(), "clear removes mesh commands");

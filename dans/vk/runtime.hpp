@@ -3,10 +3,7 @@
 #include "dans/camera/camera.hpp"
 #include "dans/font/font_atlas.hpp"
 #include "dans/mesh/mesh.hpp"
-#include "dans/vk/debug_draw.hpp"
 #include "dans/vk/drawlist.hpp"
-#include "dans/vk/shape_draw.hpp"
-#include "dans/vk/text_draw.hpp"
 #include "dans/vk/types.hpp"
 
 #include <concepts>
@@ -14,7 +11,6 @@
 #include <memory>
 #include <span>
 #include <string>
-#include <vector>
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
 
@@ -160,10 +156,12 @@ struct FrameContext
     VkRenderPass main_render_pass{VK_NULL_HANDLE};
     VmaAllocator allocator{VK_NULL_HANDLE};
     VkExtent2D extent{};
+
     u32 frame_index{};
     u32 swapchain_image_index{};
     u32 swapchain_image_count{};
     f32 dt_seconds{};
+
     Camera& camera;
     DrawList& draw;
     const InputState& input;

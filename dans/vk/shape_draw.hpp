@@ -15,7 +15,7 @@ namespace dans::vk
 // Shape codes that map to the fragment shader's switch. Public for advanced
 // callers that build instances directly; most code should use the DrawList
 // convenience methods.
-enum class Shape2DType : u32
+enum class Shape2DType : u8
 {
     box = 0u,
     circle = 1u,

@@ -1,8 +1,8 @@
 // dans/dans-util/chrono.hpp
 // Externals
-#include "dans/dans-util/dev.hpp"
 #include "dans/dans-core/development_markers.hpp"
 #include "dans/dans-core/types.hpp"
+#include "dans/dans-util/dev.hpp"
 // StdLib
 #include <chrono>
 #include <print>
@@ -13,16 +13,16 @@
 
 #pragma once
 #ifndef DANS_CHRONO_HPP
-#define DANS_CHRONO_HPP
+#    define DANS_CHRONO_HPP
 
 namespace dans::chrono
 {
+using Clock = std::chrono::steady_clock;
 [[nodiscard]] def format_seconds(std::chrono::duration<f64> dur, bool show_milliseconds = false)
     -> std::string;
 
 class ScopeTimer
 {
-    using Clock = std::chrono::steady_clock;
 
   public:
     explicit ScopeTimer(std::string_view name, bool print_millis = false)
@@ -42,8 +42,8 @@ class ScopeTimer
     }
     ScopeTimer(const ScopeTimer&) = delete;
     ScopeTimer(ScopeTimer&&) = delete;
-    def operator=(const ScopeTimer&) -> ScopeTimer& = delete;
-    def operator=(ScopeTimer&&) -> ScopeTimer& = delete;
+    def operator=(const ScopeTimer&)->ScopeTimer& = delete;
+    def operator=(ScopeTimer&&)->ScopeTimer& = delete;
 
   private:
     std::string_view name_{};
