@@ -77,3 +77,6 @@ imgui.ini
 local/
 assets/
 private/
+
+# LLDB SB API headers, fetched by scripts/setup_lldb.ps1 (matched to local LLVM)
+extern/

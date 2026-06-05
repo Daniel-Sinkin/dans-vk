@@ -357,3 +357,39 @@ elseif(DANS_VK_BUILD_RUNTIME)
     message(WARNING "Vulkan runtime was requested but Vulkan was not found; building core targets only.")
   endif()
 endif()
+
+option(DANS_VK_BUILD_DEBUGGER "Build the LLDB-backed debugger app" ${DANS_VK_IS_TOP_LEVEL})
+
+if(DANS_VK_BUILD_DEBUGGER)
+  set(DANS_VK_LLVM_ROOT "C:/Program Files/LLVM" CACHE PATH "LLVM install root (for liblldb)")
+  set(DANS_VK_LLDB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/extern/llvm-project/lldb/include"
+      CACHE PATH "LLDB SB API headers (run scripts/setup_lldb.ps1 to fetch)")
+  if(WIN32)
+    set(DANS_VK_LLDB_LIB "${DANS_VK_LLVM_ROOT}/lib/liblldb.lib" CACHE FILEPATH "liblldb import library")
+    set(DANS_VK_LLDB_DLL "${DANS_VK_LLVM_ROOT}/bin/liblldb.dll" CACHE FILEPATH "liblldb runtime DLL")
+    set(DANS_VK_PYTHON_DLL "C:/Users/Daniel/AppData/Local/Programs/Python/Python311/python311.dll"
+        CACHE FILEPATH "python DLL that liblldb.dll imports")
+  else()
+    set(DANS_VK_LLDB_LIB "lldb" CACHE STRING "liblldb link name/path")
+  endif()
+
+  if(EXISTS "${DANS_VK_LLDB_INCLUDE_DIR}/lldb/API/LLDB.h")
+    add_executable(dans_vk_debugger app/debugger/main.cpp)
+    target_include_directories(dans_vk_debugger SYSTEM PRIVATE "${DANS_VK_LLDB_INCLUDE_DIR}")
+    target_link_libraries(dans_vk_debugger PRIVATE "${DANS_VK_LLDB_LIB}" dans_vk_warnings)
+
+    add_executable(dans_vk_debugger_sample app/debugger/sample/hello.cpp)
+    target_compile_options(dans_vk_debugger_sample PRIVATE -g -O0)
+
+    if(WIN32)
+      add_custom_command(TARGET dans_vk_debugger POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "${DANS_VK_LLDB_DLL}" "$<TARGET_FILE_DIR:dans_vk_debugger>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "${DANS_VK_PYTHON_DLL}" "$<TARGET_FILE_DIR:dans_vk_debugger>"
+        VERBATIM)
+    endif()
+  else()
+    message(STATUS "dans_vk_debugger skipped: LLDB SB headers missing. Run scripts/setup_lldb.ps1.")
+  endif()
+endif()
