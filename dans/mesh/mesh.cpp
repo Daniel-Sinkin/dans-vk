@@ -10,6 +10,7 @@
 #include <cmath>
 #include <limits>
 #include <numbers>
+#include <ranges>
 #include <span>
 //
 
@@ -73,19 +74,19 @@ namespace
         Face{.corners = {0b011u, 0b111u, 0b110u, 0b010u}, .normal = k_axis_y},
         Face{.corners = {0b000u, 0b100u, 0b101u, 0b001u}, .normal = -k_axis_y},
     }};
-    constexpr std::array<Vec2, 4> uv{{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
+    constexpr std::array<Vec2, 4> uvs{{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
 
     std::array<Vertex, 24> vertices{};
     auto index = 0zu;
     for (const auto& face : faces)
     {
-        for (auto k = 0zu; k < 4zu; ++k)
+        for (const auto& [face_corner, uv] : std::views::zip(face.corners, uvs))
         {
             vertices[index++] = Vertex{
-                .position = corner[face.corners[k]],
+                .position = corner[face_corner],
                 .normal = face.normal,
                 .color = Color::white,
-                .texcoord = uv[k],
+                .texcoord = uv,
             };
         }
     }

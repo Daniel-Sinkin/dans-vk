@@ -9,16 +9,16 @@
 
 namespace dans::geom
 {
-using dans::linalg::Mat4;
-using dans::linalg::Quat;
-using dans::linalg::Vec2;
-using dans::linalg::Vec3;
-using dans::linalg::Vec4;
 using dans::linalg::k_axis_x;
 using dans::linalg::k_axis_y;
 using dans::linalg::k_axis_z;
 using dans::linalg::k_quat_identity;
+using dans::linalg::Mat4;
 using dans::linalg::normalize_or;
+using dans::linalg::Quat;
+using dans::linalg::Vec2;
+using dans::linalg::Vec3;
+using dans::linalg::Vec4;
 
 struct Ray
 {

@@ -3,9 +3,11 @@
 #include "dans/geom/geometry.hpp"
 
 #include "dans/dans-core/development_markers.hpp"
+#include "dans/dans-util/dans_util.hpp"
 // StdLib
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <cmath>
 #include <limits>
 //
@@ -42,34 +44,32 @@ struct FaceDistance
 auto intersect_sphere(const Ray& ray, const Sphere& sphere) noexcept -> std::optional<f32>
 {
     const auto oc = ray.origin - sphere.center;
+
     const auto radius = std::max(0.0f, sphere.radius);
     const auto a = glm::dot(ray.direction, ray.direction);
+
     const auto half_b = glm::dot(oc, ray.direction);
     const auto c = glm::dot(oc, oc) - radius * radius;
+
     const auto discriminant = half_b * half_b - a * c;
-    if (discriminant < 0.0f)
-    {
-        return std::nullopt;
-    }
+    if (discriminant < 0.0f) return std::nullopt;
 
     const auto root = std::sqrt(discriminant);
     const auto near_t = (-half_b - root) / a;
-    if (near_t >= 0.0f)
-    {
-        return near_t;
-    }
+    if (near_t >= 0.0f) return near_t;
+
     const auto far_t = (-half_b + root) / a;
-    if (far_t >= 0.0f)
-    {
-        return far_t;
-    }
+    if (far_t >= 0.0f) return far_t;
+
     return std::nullopt;
 }
 
 auto intersect_aabb(const Ray& ray, const Aabb& aabb) noexcept -> std::optional<f32>
 {
+    using dans::math::in_interval;
     const auto box_min = glm::min(aabb.min, aabb.max);
     const auto box_max = glm::max(aabb.min, aabb.max);
+
     auto t_min = 0.0f;
     auto t_max = std::numeric_limits<f32>::max();
     for (usize axis = 0; axis < 3zu; ++axis)
@@ -78,122 +78,106 @@ auto intersect_aabb(const Ray& ray, const Aabb& aabb) noexcept -> std::optional<
         const auto direction = ray.direction[axis];
         if (std::abs(direction) <= 1.0e-8f)
         {
-            if (origin < box_min[axis] or origin > box_max[axis]) return std::nullopt;
+            if (not in_interval(origin, box_min[axis], box_max[axis])) return std::nullopt;
+            continue;
         }
-        else
-        {
-            const auto inv_direction = 1.0f / direction;
-            auto t0 = (box_min[axis] - origin) * inv_direction;
-            auto t1 = (box_max[axis] - origin) * inv_direction;
-            if (t0 > t1) std::swap(t0, t1);
-            t_min = std::max(t_min, t0);
-            t_max = std::min(t_max, t1);
-            if (t_max < t_min) return std::nullopt;
-        }
+        const auto inv_direction = 1.0f / direction;
+        auto t0 = (box_min[axis] - origin) * inv_direction;
+        auto t1 = (box_max[axis] - origin) * inv_direction;
+        if (t0 > t1) std::swap(t0, t1);
+        t_min = std::max(t_min, t0);
+        t_max = std::min(t_max, t1);
+        if (t_max < t_min) return std::nullopt;
     }
     return t_min;
 }
 
 auto intersect_obb(const Ray& ray, const Obb& obb) noexcept -> std::optional<f32>
 {
-    const auto hit = hit_obb(ray, obb);
-    if (!hit.has_value())
+    if (const auto hit_res = hit_obb(ray, obb); hit_res)
     {
-        return std::nullopt;
+        return hit_res->distance;
     }
-    return hit->distance;
+    return std::nullopt;
 }
 
 auto intersect_capsule(const Ray& ray, const Capsule& capsule) noexcept -> std::optional<f32>
 {
-    const auto hit = hit_capsule(ray, capsule);
-    if (!hit.has_value())
+    if (const auto hit_res = hit_capsule(ray, capsule); hit_res)
     {
-        return std::nullopt;
+        return hit_res->distance;
     }
-    return hit->distance;
+    return std::nullopt;
 }
 
 auto hit_sphere(const Ray& ray, const Sphere& sphere) noexcept -> std::optional<RayHit>
 {
-    const auto distance = intersect_sphere(ray, sphere);
-    if (!distance.has_value())
+    if (const auto distance_res = intersect_sphere(ray, sphere); distance_res)
     {
-        return std::nullopt;
+        const auto distance = *distance_res;
+        const auto position = ray.origin + distance * ray.direction;
+        const auto normal = normalize_or(position - sphere.center, ray.direction);
+        return RayHit{.distance = distance, .position = position, .normal = normal};
     }
-    const auto position = ray.origin + *distance * ray.direction;
-    return RayHit{
-        .distance = *distance,
-        .position = position,
-        .normal = normalize_or(position - sphere.center, ray.direction),
-    };
+    return std::nullopt;
 }
 
 auto hit_aabb(const Ray& ray, const Aabb& aabb) noexcept -> std::optional<RayHit>
 {
-    const auto distance = intersect_aabb(ray, aabb);
-    if (!distance.has_value())
+    if (const auto distance_res = intersect_aabb(ray, aabb); distance_res)
     {
-        return std::nullopt;
+        const auto distance = *distance_res;
+        const auto box_min = glm::min(aabb.min, aabb.max);
+        const auto box_max = glm::max(aabb.min, aabb.max);
+        const auto position = ray.origin + distance * ray.direction;
+        const auto normal = aabb_normal_at(position, box_min, box_max);
+        return RayHit{.distance = distance, .position = position, .normal = normal};
     }
-    const auto box_min = glm::min(aabb.min, aabb.max);
-    const auto box_max = glm::max(aabb.min, aabb.max);
-    const auto position = ray.origin + *distance * ray.direction;
-    return RayHit{
-        .distance = *distance,
-        .position = position,
-        .normal = aabb_normal_at(position, box_min, box_max),
-    };
+    return std::nullopt;
 }
 
 auto hit_obb(const Ray& ray, const Obb& obb) noexcept -> std::optional<RayHit>
 {
     const auto inverse_rotation = glm::inverse(obb.rotation);
-    const Ray local_ray{
-        .origin = inverse_rotation * (ray.origin - obb.center),
-        .direction = normalize_or(inverse_rotation * ray.direction, ray.direction),
-    };
-    const auto local_hit = hit_aabb(
-        local_ray, Aabb{.min = -glm::abs(obb.half_extent), .max = glm::abs(obb.half_extent)}
-    );
-    if (!local_hit.has_value())
+    const auto origin = inverse_rotation * (ray.origin - obb.center);
+    const auto direction = normalize_or(inverse_rotation * ray.direction, ray.direction);
+    const Ray local_ray{.origin = origin, .direction = direction};
+
+    const auto e = glm::abs(obb.half_extent);
+
+    if (const auto hit_res = hit_aabb(local_ray, Aabb{.min = -e, .max = e}); hit_res)
     {
-        return std::nullopt;
+        const auto local_hit = *hit_res;
+        const auto position = obb.center + obb.rotation * local_hit.position;
+        const auto distance = glm::dot(position - ray.origin, ray.direction);
+        const auto normal = normalize_or(obb.rotation * local_hit.normal, ray.direction);
+        return RayHit{.distance = distance, .position = position, .normal = normal};
     }
-    const auto world_position = obb.center + obb.rotation * local_hit->position;
-    return RayHit{
-        .distance = glm::dot(world_position - ray.origin, ray.direction),
-        .position = world_position,
-        .normal = normalize_or(obb.rotation * local_hit->normal, ray.direction),
-    };
+    return std::nullopt;
 }
 
 auto hit_capsule(const Ray& ray, const Capsule& capsule) noexcept -> std::optional<RayHit>
 {
-    const auto radius = std::max(0.0f, capsule.radius);
-    const auto segment = capsule.b - capsule.a;
-    const auto segment_length_squared = glm::dot(segment, segment);
-    if (segment_length_squared <= 1.0e-12f)
-    {
-        return hit_sphere(ray, Sphere{.center = capsule.a, .radius = radius});
+    {  // Expects
+        assert(capsule.radius > 0.0f && "Capsule Radius must be positive");
     }
+    const auto r = capsule.radius;
+    const auto r2 = r * r;
+    const auto segment = capsule.b - capsule.a;
+    const auto s2 = glm::dot(segment, segment);
+    if (s2 <= 1.0e-12f) return hit_sphere(ray, Sphere{.center = capsule.a, .radius = r});
 
     const auto ray_direction = normalize_or(ray.direction, k_axis_x);
     const auto ray_to_a = ray.origin - capsule.a;
     const auto ray_segment_dot = glm::dot(ray_direction, segment);
     const auto ray_to_a_dot_ray = glm::dot(ray_to_a, ray_direction);
     const auto ray_to_a_dot_segment = glm::dot(ray_to_a, segment);
-    const auto denom = segment_length_squared - ray_segment_dot * ray_segment_dot;
 
-    auto ray_t = 0.0f;
-    if (std::abs(denom) > 1.0e-8f)
-    {
-        ray_t = (ray_segment_dot * ray_to_a_dot_segment - segment_length_squared * ray_to_a_dot_ray)
-                / denom;
-    }
-    ray_t = std::max(0.0f, ray_t);
+    const auto denom = s2 - ray_segment_dot * ray_segment_dot;
+    const auto nomin = ray_segment_dot * ray_to_a_dot_segment - s2 * ray_to_a_dot_ray;
+    auto ray_t = (std::abs(denom) > 1.0e-8f) ? nomin / denom : 0.0f;
 
-    auto segment_t = (ray_segment_dot * ray_t + ray_to_a_dot_segment) / segment_length_squared;
+    auto segment_t = (ray_segment_dot * ray_t + ray_to_a_dot_segment) / s2;
     segment_t = std::clamp(segment_t, 0.0f, 1.0f);
     ray_t = std::max(0.0f, ray_segment_dot * segment_t - ray_to_a_dot_ray);
 
@@ -201,18 +185,17 @@ auto hit_capsule(const Ray& ray, const Capsule& capsule) noexcept -> std::option
     const auto closest_ray_position = ray.origin + ray_t * ray_direction;
     const auto offset = closest_ray_position - axis_position;
     const auto distance_squared = glm::dot(offset, offset);
-    if (distance_squared > radius * radius)
-    {
-        return std::nullopt;
-    }
+    if (distance_squared > r2) return std::nullopt;
 
-    const auto entry_offset = std::sqrt(std::max(0.0f, radius * radius - distance_squared));
+    const auto entry_offset = std::sqrt(std::max(0.0f, r2 - distance_squared));
     const auto entry_t = std::max(0.0f, ray_t - entry_offset);
     const auto hit_position = ray.origin + entry_t * ray_direction;
-    const auto hit_segment_t = std::clamp(
-        glm::dot(hit_position - capsule.a, segment) / segment_length_squared, 0.0f, 1.0f
-    );
+
+    const auto unclamped = glm::dot(hit_position - capsule.a, segment) / s2;
+    const auto hit_segment_t = std::clamp(unclamped, 0.0f, 1.0f);
+
     const auto hit_axis_position = capsule.a + hit_segment_t * segment;
+
     return RayHit{
         .distance = entry_t,
         .position = hit_position,
