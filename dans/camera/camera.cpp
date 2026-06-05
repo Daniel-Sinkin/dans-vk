@@ -10,11 +10,11 @@
 
 namespace dans::camera
 {
-using dans::linalg::Vec4;
 using dans::linalg::k_axis_x;
 using dans::linalg::k_axis_y;
 using dans::linalg::k_axis_z;
 using dans::linalg::normalize_or;
+using dans::linalg::Vec4;
 
 auto Camera::configure(const CameraConfig& config) noexcept -> Camera&
 {
@@ -237,25 +237,31 @@ auto Camera::pan_offset_world(f32 dx_px, f32 dy_px, f32 viewport_height_px) cons
     return (-dx_px * units) * right() + (dy_px * units) * up();
 }
 
-auto make_camera_ray(const Camera& camera, Vec2 cursor_logical_px, Vec2 viewport_logical_px) noexcept
-    -> Ray
+auto make_camera_ray(
+    const Camera& camera, Vec2 cursor_logical_px, Vec2 viewport_logical_px
+) noexcept -> Ray
 {
     const auto viewport = glm::max(viewport_logical_px, Vec2{1.0f});
     const auto ndc_x = 2.0f * cursor_logical_px.x / viewport.x - 1.0f;
     const auto ndc_y = 2.0f * cursor_logical_px.y / viewport.y - 1.0f;
-    const auto aspect = viewport.x / viewport.y;
-    const auto inverse_view_projection = glm::inverse(camera.view_projection_matrix(aspect));
+
     const Vec4 near_clip{ndc_x, ndc_y, 0.0f, 1.0f};
     const Vec4 far_clip{ndc_x, ndc_y, 1.0f, 1.0f};
-    auto near_world = inverse_view_projection * near_clip;
-    auto far_world = inverse_view_projection * far_clip;
-    near_world /= near_world.w;
-    far_world /= far_world.w;
-    const Vec3 origin{near_world};
-    return Ray{
-        .origin = origin,
-        .direction = normalize_or(Vec3{far_world - near_world}, -k_axis_z),
+
+    const auto aspect = viewport.x / viewport.y;
+    const auto inverse_view_projection = glm::inverse(camera.view_projection_matrix(aspect));
+    const auto to_world = [&](const Vec4& clip)
+    {
+        auto out = inverse_view_projection * clip;
+        return out / out.w;
     };
+    const auto near_world = to_world(near_clip);
+    const auto far_world = to_world(far_clip);
+
+    const Vec3 origin{near_world};
+    const auto direction = normalize_or(Vec3{far_world - near_world}, -k_axis_z);
+
+    return Ray{.origin = origin, .direction = direction};
 }
 
 }  // namespace dans::camera

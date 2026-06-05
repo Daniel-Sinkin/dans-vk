@@ -103,10 +103,7 @@ auto intersect_obb(const Ray& ray, const Obb& obb) noexcept -> std::optional<f32
 
 auto intersect_capsule(const Ray& ray, const Capsule& capsule) noexcept -> std::optional<f32>
 {
-    if (const auto hit_res = hit_capsule(ray, capsule); hit_res)
-    {
-        return hit_res->distance;
-    }
+    if (const auto hit_res = hit_capsule(ray, capsule); hit_res) return hit_res->distance;
     return std::nullopt;
 }
 

@@ -41,6 +41,7 @@ struct FontMetrics
 struct FontBakeConfig
 {
     std::filesystem::path ttf_path{};
+
     f32 pixel_size{16.0f};
     // Multiplier for atlas resolution. The atlas is actually baked at
     // pixel_size * dpi_scale physical pixels so glyphs stay crisp on
@@ -108,8 +109,7 @@ struct BakedFont
 
 [[nodiscard]] auto bake_font(const FontBakeConfig& config) -> BakedFont;
 
-[[nodiscard]] auto glyph_for(const BakedFont& font, u32 codepoint) noexcept
-    -> const GlyphMetrics*;
+[[nodiscard]] auto glyph_for(const BakedFont& font, u32 codepoint) noexcept -> const GlyphMetrics*;
 
 [[nodiscard]] auto line_advance(const FontMetrics& metrics) noexcept -> f32;
 
