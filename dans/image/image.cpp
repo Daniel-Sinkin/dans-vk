@@ -2,7 +2,7 @@
 //
 #include "dans/image/image.hpp"
 
-#include "dans/dans-util/dev.hpp"
+#include "dans/dans-util/dans_util.hpp"
 // Externals
 #include <stb_image.h>
 #include <stb_image_write.h>

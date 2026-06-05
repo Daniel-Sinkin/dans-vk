@@ -91,13 +91,7 @@ target_include_directories(dans_core INTERFACE
 )
 
 add_library(dans_util STATIC
-  dans/dans-util/chrono.cpp
-  dans/dans-util/dev.cpp
-  dans/dans-util/env.cpp
-  dans/dans-util/fmt.cpp
-  dans/dans-util/random.cpp
-  dans/dans-util/str.cpp
-  dans/dans-util/util.cpp
+  dans/dans-util/dans_util.cpp
 )
 add_library(dans::util ALIAS dans_util)
 target_include_directories(dans_util PUBLIC
