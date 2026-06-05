@@ -34,6 +34,12 @@ if(WIN32)
   add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 endif()
 
+# Force glm's length_type (vector/matrix operator[] index and .length()) to
+# std::size_t so glm indexing matches usize everywhere. Must be global and
+# identical for every TU or glm types mismatch across translation units;
+# dans/linalg/linalg.hpp static_asserts it held.
+add_compile_definitions(GLM_FORCE_SIZE_T_LENGTH)
+
 option(DANS_VK_BUILD_RUNTIME "Build the Vulkan runtime target" ON)
 option(DANS_VK_BUILD_EXAMPLES "Build dans_vk example applications" ${DANS_VK_IS_TOP_LEVEL})
 option(DANS_VK_BUILD_TESTS "Build dans_vk tests" ${DANS_VK_IS_TOP_LEVEL})
@@ -139,7 +145,7 @@ target_include_directories(dans_font PUBLIC
 )
 target_include_directories(dans_font SYSTEM PRIVATE vendor/stb)
 target_link_libraries(dans_font PUBLIC dans::core)
-target_link_libraries(dans_font PRIVATE dans_vk_warnings)
+target_link_libraries(dans_font PRIVATE dans_vk_warnings dans::util)
 
 add_library(dans_geom STATIC dans/geom/geometry.cpp)
 add_library(dans::geom ALIAS dans_geom)
@@ -175,7 +181,7 @@ target_include_directories(dans_image PUBLIC
 )
 target_include_directories(dans_image SYSTEM PRIVATE vendor/stb)
 target_link_libraries(dans_image PUBLIC dans::core dans_gfx)
-target_link_libraries(dans_image PRIVATE dans_vk_warnings)
+target_link_libraries(dans_image PRIVATE dans_vk_warnings dans::util)
 
 add_library(dans_mesh_io STATIC
   dans/mesh_io/gltf.cpp

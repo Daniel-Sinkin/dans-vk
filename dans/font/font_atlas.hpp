@@ -5,6 +5,8 @@
 #include "dans/dans-core/types.hpp"
 // StdLib
 #include <filesystem>
+#include <string>
+#include <string_view>
 #include <vector>
 //
 
@@ -49,7 +51,50 @@ struct FontBakeConfig
     u32 codepoint_count{96u};
     u32 atlas_width{512u};
     u32 atlas_height{512u};
+
+    [[nodiscard]] auto to_string() const -> std::string;
 };
+
+enum class FontBakeConfigValidity : u8
+{
+    valid = 0,
+    zero_codepoint_count,
+    zero_atlas_dimension,
+    non_positive_pixel_size,
+    non_positive_dpi_scale,
+};
+
+[[nodiscard]] inline auto validate(const FontBakeConfig& cfg) noexcept -> FontBakeConfigValidity
+{
+    if (cfg.codepoint_count == 0u) return FontBakeConfigValidity::zero_codepoint_count;
+    if (cfg.atlas_width == 0u or cfg.atlas_height == 0u)
+    {
+        return FontBakeConfigValidity::zero_atlas_dimension;
+    }
+    if (cfg.pixel_size <= 0.0f) return FontBakeConfigValidity::non_positive_pixel_size;
+    if (cfg.dpi_scale <= 0.0f) return FontBakeConfigValidity::non_positive_dpi_scale;
+    return FontBakeConfigValidity::valid;
+}
+
+[[nodiscard]] inline auto is_valid(const FontBakeConfig& cfg) noexcept -> bool
+{
+    return validate(cfg) == FontBakeConfigValidity::valid;
+}
+
+// clang-format off
+[[nodiscard]] constexpr auto to_string(FontBakeConfigValidity v) noexcept -> std::string_view
+{
+    switch (v)
+    {
+        case FontBakeConfigValidity::valid:                   return "valid";
+        case FontBakeConfigValidity::zero_codepoint_count:    return "zero_codepoint_count";
+        case FontBakeConfigValidity::zero_atlas_dimension:    return "zero_atlas_dimension";
+        case FontBakeConfigValidity::non_positive_pixel_size: return "non_positive_pixel_size";
+        case FontBakeConfigValidity::non_positive_dpi_scale:  return "non_positive_dpi_scale";
+    }
+    return "unknown";
+}
+// clang-format on
 
 struct BakedFont
 {

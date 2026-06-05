@@ -43,11 +43,7 @@ auto load_rgba_f32(const std::filesystem::path& path) -> ImageF
     auto* pixels = stbi_loadf(path.string().c_str(), &width, &height, &channels, STBI_rgb_alpha);
     if (pixels == nullptr)
     {
-        throw std::runtime_error(
-            std::format(
-                "dans::image: failed to load HDR {}: {}", path.string(), stbi_failure_reason()
-            )
-        );
+        DANS_PANIC(std::format("failed to load HDR {}: {}", path.string(), stbi_failure_reason()));
     }
     dev::Defer _{[&pixels] { stbi_image_free(pixels); }};
 

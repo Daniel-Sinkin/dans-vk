@@ -1,12 +1,15 @@
 // dans/font/font_atlas.cpp
 //
 #include "dans/font/font_atlas.hpp"
+
+#include "dans/dans-util/dans_util.hpp"
 // Externals
 #include <stb_truetype.h>
 // StdLib
 #include <cstdio>
 #include <format>
-#include <stdexcept>
+#include <string>
+#include <string_view>
 //
 
 namespace dans::font
@@ -17,137 +20,132 @@ namespace
 
 [[nodiscard]] auto read_file_bytes(const std::filesystem::path& path) -> std::vector<u8>
 {
-    std::FILE* file = std::fopen(path.string().c_str(), "rb");
-    if (file == nullptr)
-    {
-        throw std::runtime_error(std::format("failed to open font file: {}", path.string()));
-    }
+    const auto fail = [&](std::string_view action) -> std::string
+    { return std::format("failed to {} font file: {}", action, path.string()); };
 
-    if (std::fseek(file, 0, SEEK_END) != 0)
-    {
-        std::fclose(file);
-        throw std::runtime_error(std::format("failed to seek font file: {}", path.string()));
-    }
+    std::FILE* file = std::fopen(path.string().c_str(), "rb");
+    if (file == nullptr) DANS_PANIC(fail("open"));
+    if (std::fseek(file, 0, SEEK_END) != 0) DANS_PANIC(fail("seek"));
     const auto end = std::ftell(file);
-    if (end < 0)
-    {
-        std::fclose(file);
-        throw std::runtime_error(std::format("failed to size font file: {}", path.string()));
-    }
-    std::rewind(file);
+    if (end < 0) DANS_PANIC(fail("size"));
+    if (std::fseek(file, 0, SEEK_SET) != 0) DANS_PANIC(fail("rewind"));
 
     std::vector<u8> data(static_cast<usize>(end));
     const auto read = std::fread(data.data(), 1, data.size(), file);
     std::fclose(file);
-    if (read != data.size())
-    {
-        throw std::runtime_error(std::format("failed to read font file: {}", path.string()));
-    }
+    if (read != data.size()) DANS_PANIC(fail("read"));
     return data;
 }
 
 }  // namespace
 
+auto FontBakeConfig::to_string() const -> std::string
+{
+    return std::format(
+        "FontBakeConfig{{ttf_path={}, pixel_size={}, dpi_scale={}, first_codepoint={}, "
+        "codepoint_count={}, atlas={}x{}}}",
+        ttf_path.string(),
+        pixel_size,
+        dpi_scale,
+        first_codepoint,
+        codepoint_count,
+        atlas_width,
+        atlas_height
+    );
+}
+
 auto bake_font(const FontBakeConfig& config) -> BakedFont
 {
-    if (config.codepoint_count == 0u)
-    {
-        throw std::runtime_error("bake_font: codepoint_count must be > 0");
+    {  // Expects
+        if (not is_valid(config))
+        {
+            DANS_PANIC(std::format("{}: {}", to_string(validate(config)), config.to_string()));
+        }
     }
-    if (config.atlas_width == 0u or config.atlas_height == 0u)
-    {
-        throw std::runtime_error("bake_font: atlas dimensions must be > 0");
-    }
-    if (config.pixel_size <= 0.0f)
-    {
-        throw std::runtime_error("bake_font: pixel_size must be positive");
-    }
-    const auto dpi_scale = (config.dpi_scale > 0.0f) ? config.dpi_scale : 1.0f;
-    const auto inv_dpi = 1.0f / dpi_scale;
-    const auto baked_pixel_size = config.pixel_size * dpi_scale;
+
+    const auto baked_pixel_size = config.pixel_size * config.dpi_scale;
 
     const auto ttf_bytes = read_file_bytes(config.ttf_path);
-
-    stbtt_fontinfo info{};
-    const auto offset = stbtt_GetFontOffsetForIndex(ttf_bytes.data(), 0);
-    if (offset < 0 or stbtt_InitFont(&info, ttf_bytes.data(), offset) == 0)
+    BakedFont result = [&]
     {
-        throw std::runtime_error(
-            std::format("bake_font: stb_truetype failed to parse {}", config.ttf_path.string())
+        stbtt_fontinfo font_info{};
+        const auto offset = stbtt_GetFontOffsetForIndex(ttf_bytes.data(), 0);
+        if (offset < 0 or stbtt_InitFont(&font_info, ttf_bytes.data(), offset) == 0)
+        {
+            DANS_PANIC(std::format("failed to parse {}", config.ttf_path.string()));
+        }
+
+        BakedFont out{};
+        out.metrics = [&]
+        {
+            FontMetrics metrics{};
+            int ascent{};
+            int descent{};
+            int line_gap{};
+            stbtt_GetFontVMetrics(&font_info, &ascent, &descent, &line_gap);
+            const auto scale = stbtt_ScaleForPixelHeight(&font_info, baked_pixel_size);
+            const auto adjust = scale / config.dpi_scale;
+            metrics.ascent = static_cast<f32>(ascent) * adjust;
+            metrics.descent = static_cast<f32>(descent) * adjust;
+            metrics.line_gap = static_cast<f32>(line_gap) * adjust;
+            metrics.pixel_size = config.pixel_size;
+            return metrics;
+        }();
+        out.atlas_width = config.atlas_width;
+        out.atlas_height = config.atlas_height;
+        out.first_codepoint = config.first_codepoint;
+        out.pixels.resize(
+            static_cast<usize>(config.atlas_width) * static_cast<usize>(config.atlas_height), u8{0}
         );
-    }
+        out.glyphs.reserve(config.codepoint_count);
+        return out;
+    }();
 
-    BakedFont result{};
-    result.atlas_width = config.atlas_width;
-    result.atlas_height = config.atlas_height;
-    result.first_codepoint = config.first_codepoint;
-    result.pixels.assign(
-        static_cast<usize>(config.atlas_width) * static_cast<usize>(config.atlas_height), u8{0}
-    );
-    result.glyphs.resize(config.codepoint_count);
-
-    std::vector<stbtt_bakedchar> chardata(config.codepoint_count);
-    const auto bake_result = stbtt_BakeFontBitmap(
-        ttf_bytes.data(),
-        0,
-        baked_pixel_size,
-        result.pixels.data(),
-        static_cast<int>(config.atlas_width),
-        static_cast<int>(config.atlas_height),
-        static_cast<int>(config.first_codepoint),
-        static_cast<int>(config.codepoint_count),
-        chardata.data()
-    );
-    if (bake_result <= 0)
+    const auto chardata = [&]
     {
-        throw std::runtime_error(std::format(
-            "bake_font: atlas {}x{} could not fit {} glyphs at {}px (dpi_scale {})",
-            config.atlas_width,
-            config.atlas_height,
-            config.codepoint_count,
-            static_cast<f64>(config.pixel_size),
-            static_cast<f64>(dpi_scale)
-        ));
-    }
+        std::vector<stbtt_bakedchar> out(config.codepoint_count);
+        const auto bake_result = stbtt_BakeFontBitmap(
+            ttf_bytes.data(),
+            0,
+            baked_pixel_size,
+            result.pixels.data(),
+            static_cast<int>(config.atlas_width),
+            static_cast<int>(config.atlas_height),
+            static_cast<int>(config.first_codepoint),
+            static_cast<int>(config.codepoint_count),
+            out.data()
+        );
+        if (bake_result > 0) return out;
+        DANS_PANIC(std::format("font atlas could not fit the glyphs: {}", config.to_string()));
+    }();
 
-    int ascent{};
-    int descent{};
-    int line_gap{};
-    stbtt_GetFontVMetrics(&info, &ascent, &descent, &line_gap);
-    const auto scale = stbtt_ScaleForPixelHeight(&info, baked_pixel_size);
-    result.metrics.ascent = static_cast<f32>(ascent) * scale * inv_dpi;
-    result.metrics.descent = static_cast<f32>(descent) * scale * inv_dpi;
-    result.metrics.line_gap = static_cast<f32>(line_gap) * scale * inv_dpi;
-    result.metrics.pixel_size = config.pixel_size;
-
-    for (auto i = 0zu; i < chardata.size(); ++i)
+    for (const auto& src : chardata)
     {
-        const auto& src = chardata[i];
-        GlyphMetrics& dst = result.glyphs[i];
-        dst.atlas_x = static_cast<u16>(src.x0);
-        dst.atlas_y = static_cast<u16>(src.y0);
-        dst.atlas_w = static_cast<u16>(src.x1 - src.x0);
-        dst.atlas_h = static_cast<u16>(src.y1 - src.y0);
-        dst.width = static_cast<f32>(dst.atlas_w) * inv_dpi;
-        dst.height = static_cast<f32>(dst.atlas_h) * inv_dpi;
-        dst.offset_x = src.xoff * inv_dpi;
-        dst.offset_y = src.yoff * inv_dpi;
-        dst.advance = src.xadvance * inv_dpi;
+        const auto inv_dpi = 1.0f / config.dpi_scale;
+        const auto atlas_x = static_cast<u16>(src.x0);
+        const auto atlas_y = static_cast<u16>(src.y0);
+        const auto atlas_w = static_cast<u16>(src.x1 - atlas_x);
+        const auto atlas_h = static_cast<u16>(src.y1 - atlas_y);
+        result.glyphs.push_back({
+            .atlas_x = atlas_x,
+            .atlas_y = atlas_y,
+            .atlas_w = atlas_w,
+            .atlas_h = atlas_h,
+            .width = static_cast<f32>(atlas_w) * inv_dpi,
+            .height = static_cast<f32>(atlas_h) * inv_dpi,
+            .offset_x = src.xoff * inv_dpi,
+            .offset_y = src.yoff * inv_dpi,
+            .advance = src.xadvance * inv_dpi,
+        });
     }
     return result;
 }
 
 auto glyph_for(const BakedFont& font, u32 codepoint) noexcept -> const GlyphMetrics*
 {
-    if (codepoint < font.first_codepoint)
-    {
-        return nullptr;
-    }
+    if (codepoint < font.first_codepoint) return nullptr;
     const auto index = static_cast<usize>(codepoint - font.first_codepoint);
-    if (index >= font.glyphs.size())
-    {
-        return nullptr;
-    }
+    if (index >= font.glyphs.size()) return nullptr;
     return &font.glyphs[index];
 }
 

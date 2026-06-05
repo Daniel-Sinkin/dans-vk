@@ -72,38 +72,24 @@ auto intersect_aabb(const Ray& ray, const Aabb& aabb) noexcept -> std::optional<
     const auto box_max = glm::max(aabb.min, aabb.max);
     auto t_min = 0.0f;
     auto t_max = std::numeric_limits<f32>::max();
-    auto hit = true;
-    for (Vec3::length_type axis{0}; axis < Vec3::length_type{3} and hit; ++axis)
+    for (usize axis = 0; axis < 3zu; ++axis)
     {
         const auto origin = ray.origin[axis];
         const auto direction = ray.direction[axis];
         if (std::abs(direction) <= 1.0e-8f)
         {
-            if (origin < box_min[axis] or origin > box_max[axis])
-            {
-                hit = false;
-            }
+            if (origin < box_min[axis] or origin > box_max[axis]) return std::nullopt;
         }
         else
         {
             const auto inv_direction = 1.0f / direction;
             auto t0 = (box_min[axis] - origin) * inv_direction;
             auto t1 = (box_max[axis] - origin) * inv_direction;
-            if (t0 > t1)
-            {
-                std::swap(t0, t1);
-            }
+            if (t0 > t1) std::swap(t0, t1);
             t_min = std::max(t_min, t0);
             t_max = std::min(t_max, t1);
-            if (t_max < t_min)
-            {
-                hit = false;
-            }
+            if (t_max < t_min) return std::nullopt;
         }
-    }
-    if (!hit)
-    {
-        return std::nullopt;
     }
     return t_min;
 }
