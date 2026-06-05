@@ -72,7 +72,7 @@ auto intersect_aabb(const Ray& ray, const Aabb& aabb) noexcept -> std::optional<
 
     auto t_min = 0.0f;
     auto t_max = std::numeric_limits<f32>::max();
-    for (usize axis = 0; axis < 3zu; ++axis)
+    for (auto axis = 0zu; axis < 3zu; ++axis)
     {
         const auto origin = ray.origin[axis];
         const auto direction = ray.direction[axis];
