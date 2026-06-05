@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Lets a process call task_for_pid on a debuggee. Only needed if you stop
+         delegating to Apple's already-entitled debugserver (e.g. bundle your
+         own). With Apple's debugserver this is not required. -->
+    <key>com.apple.security.cs.debugger</key>
+    <true/>
+    <!-- Marks a binary as debuggable so it can be attached to while running.
+         Locally linked (ad-hoc, linker-signed) binaries are already debuggable
+         when launched under the debugger; this matters for the attach path. -->
+    <key>com.apple.security.get-task-allow</key>
+    <true/>
+</dict>
+</plist>

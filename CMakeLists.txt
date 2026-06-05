@@ -358,38 +358,83 @@ elseif(DANS_VK_BUILD_RUNTIME)
   endif()
 endif()
 
-option(DANS_VK_BUILD_DEBUGGER "Build the LLDB-backed debugger app" ${DANS_VK_IS_TOP_LEVEL})
+# --- LLDB-based debugger (cross-platform) ---
+#
+# dans_dbg wraps the LLDB SB API behind a PIMPL so a frontend never sees lldb
+# headers. The SAME backend source (dans/dbg/debugger.cpp) compiles on every
+# platform against the same SB API, so the debugger behaves identically; only
+# where liblldb lives, the Windows runtime-DLL copy, and the macOS debugserver
+# differ per OS - none of which is visible to debugger behavior. See
+# docs/debugger.md.
+option(DANS_VK_BUILD_DEBUGGER "Build the LLDB-based debugger" ${DANS_VK_IS_TOP_LEVEL})
 
 if(DANS_VK_BUILD_DEBUGGER)
-  set(DANS_VK_LLVM_ROOT "C:/Program Files/LLVM" CACHE PATH "LLVM install root (for liblldb)")
-  set(DANS_VK_LLDB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/extern/llvm-project/lldb/include"
-      CACHE PATH "LLDB SB API headers (run scripts/setup_lldb.ps1 to fetch)")
   if(WIN32)
+    # SB API headers are fetched into extern/ by scripts/setup_lldb.ps1; liblldb
+    # comes from the LLVM installer and needs its runtime DLLs copied next to the
+    # debugger executable.
+    set(DANS_VK_LLVM_ROOT "C:/Program Files/LLVM" CACHE PATH "LLVM install root (for liblldb)")
+    set(DANS_VK_LLDB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/extern/llvm-project/lldb/include"
+        CACHE PATH "LLDB SB API headers (run scripts/setup_lldb.ps1 to fetch)")
     set(DANS_VK_LLDB_LIB "${DANS_VK_LLVM_ROOT}/lib/liblldb.lib" CACHE FILEPATH "liblldb import library")
     set(DANS_VK_LLDB_DLL "${DANS_VK_LLVM_ROOT}/bin/liblldb.dll" CACHE FILEPATH "liblldb runtime DLL")
     set(DANS_VK_PYTHON_DLL "C:/Users/Daniel/AppData/Local/Programs/Python/Python311/python311.dll"
         CACHE FILEPATH "python DLL that liblldb.dll imports")
   else()
-    set(DANS_VK_LLDB_LIB "lldb" CACHE STRING "liblldb link name/path")
+    # macOS/Linux: reuse the LLVM toolchain that builds the repo (Homebrew),
+    # whose SB API headers and liblldb are already present - no extern/ fetch.
+    set(DANS_VK_LLVM_ROOT "" CACHE PATH "LLVM install root (for liblldb)")
+    if(DANS_VK_LLVM_ROOT STREQUAL "")
+      foreach(DANS_VK_LLVM_CAND IN ITEMS /opt/homebrew/opt/llvm /usr/local/opt/llvm)
+        if(EXISTS "${DANS_VK_LLVM_CAND}/include/lldb/API/LLDB.h")
+          set(DANS_VK_LLVM_ROOT "${DANS_VK_LLVM_CAND}")
+          break()
+        endif()
+      endforeach()
+    endif()
+    set(DANS_VK_LLDB_INCLUDE_DIR "${DANS_VK_LLVM_ROOT}/include" CACHE PATH "LLDB SB API headers")
+    if(APPLE)
+      set(DANS_VK_LLDB_LIB "${DANS_VK_LLVM_ROOT}/lib/liblldb.dylib" CACHE FILEPATH "liblldb")
+    else()
+      set(DANS_VK_LLDB_LIB "${DANS_VK_LLVM_ROOT}/lib/liblldb.so" CACHE FILEPATH "liblldb")
+    endif()
   endif()
 
   if(EXISTS "${DANS_VK_LLDB_INCLUDE_DIR}/lldb/API/LLDB.h")
-    add_executable(dans_vk_debugger app/debugger/main.cpp)
-    target_include_directories(dans_vk_debugger SYSTEM PRIVATE "${DANS_VK_LLDB_INCLUDE_DIR}")
-    target_link_libraries(dans_vk_debugger PRIVATE "${DANS_VK_LLDB_LIB}" dans_vk_warnings)
+    # Backend library: frontend-facing, no lldb type in its public header.
+    add_library(dans_dbg STATIC dans/dbg/debugger.cpp)
+    add_library(dans::dbg ALIAS dans_dbg)
+    target_include_directories(dans_dbg PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
+    # SB API headers are system headers so their warnings do not trip -Werror.
+    target_include_directories(dans_dbg SYSTEM PRIVATE "${DANS_VK_LLDB_INCLUDE_DIR}")
+    target_link_libraries(dans_dbg PUBLIC dans::core)
+    target_link_libraries(dans_dbg PRIVATE dans_vk_warnings "${DANS_VK_LLDB_LIB}")
+    if(NOT WIN32)
+      get_filename_component(DANS_VK_LLDB_LIBDIR "${DANS_VK_LLDB_LIB}" DIRECTORY)
+      target_link_options(dans_dbg INTERFACE "-Wl,-rpath,${DANS_VK_LLDB_LIBDIR}")
+    endif()
+    message(STATUS "dans_dbg: liblldb=${DANS_VK_LLDB_LIB}")
 
-    add_executable(dans_vk_debugger_sample app/debugger/sample/hello.cpp)
-    target_compile_options(dans_vk_debugger_sample PRIVATE -g -O0)
+    if(DANS_VK_BUILD_EXAMPLES)
+      # Console driver, plus a tiny -g -O0 sample for it to debug.
+      add_executable(dans_vk_debugger app/debugger/main.cpp)
+      target_link_libraries(dans_vk_debugger PRIVATE dans_dbg dans_vk_warnings)
 
-    if(WIN32)
-      add_custom_command(TARGET dans_vk_debugger POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-          "${DANS_VK_LLDB_DLL}" "$<TARGET_FILE_DIR:dans_vk_debugger>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-          "${DANS_VK_PYTHON_DLL}" "$<TARGET_FILE_DIR:dans_vk_debugger>"
-        VERBATIM)
+      add_executable(dans_vk_debugger_sample app/debugger/sample/hello.cpp)
+      target_compile_options(dans_vk_debugger_sample PRIVATE -g -O0)
+
+      if(WIN32)
+        add_custom_command(TARGET dans_vk_debugger POST_BUILD
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${DANS_VK_LLDB_DLL}" "$<TARGET_FILE_DIR:dans_vk_debugger>"
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${DANS_VK_PYTHON_DLL}" "$<TARGET_FILE_DIR:dans_vk_debugger>"
+          VERBATIM)
+      endif()
     endif()
   else()
-    message(STATUS "dans_vk_debugger skipped: LLDB SB headers missing. Run scripts/setup_lldb.ps1.")
+    message(STATUS "dans_vk_debugger skipped: LLDB SB headers missing at "
+            "${DANS_VK_LLDB_INCLUDE_DIR}. On Windows run scripts/setup_lldb.ps1; "
+            "on macOS install llvm via Homebrew.")
   endif()
 endif()

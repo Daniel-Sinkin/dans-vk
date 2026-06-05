@@ -1,92 +1,197 @@
-#include "lldb/API/LLDB.h"
+#include "dans/dbg/debugger.hpp"
 
-#include <cstdio>
-
-using namespace lldb;
+#include <cstdlib>
+#include <iostream>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 namespace
 {
-const char* nz(const char* s) { return s ? s : "<null>"; }
-
-const char* state_name(StateType s)
+auto print_usage(const char* executable) -> void
 {
-    switch (s)
+    std::cout << "usage: " << executable
+              << " <program> [--break file:line] [--break-fn symbol]"
+                 " [--steps N] [-- prog-args...]\n";
+}
+
+auto print_stop(const dans::dbg::StopInfo& stop) -> void
+{
+    std::cout << "[" << dans::dbg::state_name(stop.state) << "]";
+    if (not stop.description.empty())
     {
-        case eStateInvalid: return "invalid";
-        case eStateUnloaded: return "unloaded";
-        case eStateConnected: return "connected";
-        case eStateAttaching: return "attaching";
-        case eStateLaunching: return "launching";
-        case eStateStopped: return "stopped";
-        case eStateRunning: return "running";
-        case eStateStepping: return "stepping";
-        case eStateCrashed: return "crashed";
-        case eStateDetached: return "detached";
-        case eStateExited: return "exited";
-        case eStateSuspended: return "suspended";
+        std::cout << " " << stop.description;
     }
-    return "?";
+    if (not stop.function.empty())
+    {
+        std::cout << " in " << stop.function;
+        if (not stop.file.empty())
+        {
+            std::cout << " at " << stop.file << ":" << stop.line;
+        }
+    }
+    std::cout << '\n';
+}
+
+auto print_session(dans::dbg::Debugger& debugger) -> void
+{
+    const auto frames = debugger.backtrace();
+    const auto shown = frames.size() < 6 ? frames.size() : static_cast<dans::usize>(6);
+    for (dans::usize i = 0; i < shown; ++i)
+    {
+        const auto& frame = frames[i];
+        std::cout << "  #" << frame.index << " " << frame.function;
+        if (not frame.file.empty())
+        {
+            std::cout << "  (" << frame.file << ":" << frame.line << ")";
+        }
+        std::cout << '\n';
+    }
+    for (const auto& var : debugger.locals())
+    {
+        std::cout << "    " << var.type << " " << var.name << " = " << var.value << '\n';
+    }
 }
 }  // namespace
 
-int main(int argc, char** argv)
+auto main(int argc, char** argv) -> int
 {
-    const char* target_path = argc > 1 ? argv[1] : "dans_vk_debugger_sample.exe";
-
-    SBError error = SBDebugger::InitializeWithErrorHandling();
-    if (error.Fail())
+    if (argc < 2)
     {
-        std::printf("Initialize failed: %s\n", nz(error.GetCString()));
+        print_usage(argv[0]);
+        return 2;
+    }
+
+    std::string program{};
+    std::vector<std::pair<std::string, dans::u32>> line_breaks{};
+    std::vector<std::string> symbol_breaks{};
+    std::vector<std::string> inferior_args{};
+    dans::u32 steps = 0;
+
+    for (int i = 1; i < argc; ++i)
+    {
+        const std::string_view arg{argv[i]};
+        if (arg == "--help")
+        {
+            print_usage(argv[0]);
+            return 0;
+        }
+        if (arg == "--")
+        {
+            for (int j = i + 1; j < argc; ++j)
+            {
+                inferior_args.emplace_back(argv[j]);
+            }
+            break;
+        }
+        if (arg == "--break" and i + 1 < argc)
+        {
+            const std::string spec{argv[++i]};
+            const auto colon = spec.rfind(':');
+            if (colon == std::string::npos)
+            {
+                std::cerr << "expected file:line, got: " << spec << '\n';
+                return 2;
+            }
+            line_breaks.emplace_back(spec.substr(0, colon),
+                                     static_cast<dans::u32>(std::stoul(spec.substr(colon + 1))));
+        }
+        else if (arg == "--break-fn" and i + 1 < argc)
+        {
+            symbol_breaks.emplace_back(argv[++i]);
+        }
+        else if (arg == "--steps" and i + 1 < argc)
+        {
+            steps = static_cast<dans::u32>(std::stoul(argv[++i]));
+        }
+        else if (program.empty() and not arg.starts_with("--"))
+        {
+            program = arg;
+        }
+        else
+        {
+            std::cerr << "unknown or incomplete argument: " << arg << '\n';
+            print_usage(argv[0]);
+            return 2;
+        }
+    }
+
+    if (program.empty())
+    {
+        std::cerr << "no program given\n";
+        print_usage(argv[0]);
+        return 2;
+    }
+
+    dans::dbg::Debugger debugger{};
+    if (not debugger.load_executable(program))
+    {
+        std::cerr << "load failed: " << debugger.last_error() << '\n';
+        return 1;
+    }
+    std::cout << "target: " << program << '\n';
+
+    for (const auto& [file, line] : line_breaks)
+    {
+        const auto id = debugger.set_breakpoint(file, line);
+        if (id == 0)
+        {
+            std::cerr << "breakpoint failed: " << debugger.last_error() << '\n';
+            return 1;
+        }
+        std::cout << "breakpoint " << id << " at " << file << ":" << line << '\n';
+    }
+    for (const auto& symbol : symbol_breaks)
+    {
+        const auto id = debugger.set_breakpoint_by_name(symbol);
+        if (id == 0)
+        {
+            std::cerr << "breakpoint failed: " << debugger.last_error() << '\n';
+            return 1;
+        }
+        std::cout << "breakpoint " << id << " at " << symbol << '\n';
+    }
+
+    auto stop = debugger.launch(inferior_args);
+    if (stop.state == dans::dbg::State::invalid)
+    {
+        std::cerr << "launch failed: " << debugger.last_error() << '\n';
         return 1;
     }
 
-    SBDebugger debugger = SBDebugger::Create();
-    debugger.SetAsync(false);
-
-    SBTarget target = debugger.CreateTarget(target_path);
-    if (!target.IsValid())
+    auto flush_output = [&]() -> void
     {
-        std::printf("could not create target from '%s'\n", target_path);
-        return 1;
-    }
-    std::printf("target: %s [%s]\n", target_path, nz(target.GetTriple()));
+        const auto out = debugger.drain_stdout();
+        if (not out.empty())
+        {
+            std::cout << "--- inferior stdout ---\n" << out << "-----------------------\n";
+        }
+    };
 
-    SBBreakpoint bp = target.BreakpointCreateByName("add", target.GetExecutable().GetFilename());
-    std::printf("breakpoint on 'add' -> %zu location(s)\n", bp.GetNumLocations());
-
-    SBLaunchInfo launch_info(nullptr);
-    SBProcess process = target.Launch(launch_info, error);
-    if (!process.IsValid() or error.Fail())
+    while (dans::dbg::stopped_for_inspection(stop.state))
     {
-        std::printf("launch failed: %s\n", nz(error.GetCString()));
-        return 1;
+        print_stop(stop);
+        print_session(debugger);
+        flush_output();
+
+        if (steps > 0)
+        {
+            stop = debugger.step_over();
+            --steps;
+        }
+        else
+        {
+            stop = debugger.cont();
+        }
     }
-    std::printf(
-        "launched pid %llu, state = %s\n",
-        static_cast<unsigned long long>(process.GetProcessID()),
-        state_name(process.GetState())
-    );
 
-    SBThread thread = process.GetSelectedThread();
-    SBFrame frame = thread.GetSelectedFrame();
-    std::printf("stopped in: %s\n", nz(frame.GetFunctionName()));
-
-    SBValue a = frame.FindVariable("a");
-    SBValue b = frame.FindVariable("b");
-    std::printf("  %s = %s\n", nz(a.GetName()), nz(a.GetValue()));
-    std::printf("  %s = %s\n", nz(b.GetName()), nz(b.GetValue()));
-
-    thread.StepOver();
-    frame = thread.GetSelectedFrame();
-    SBValue s = frame.FindVariable("s");
-    std::printf("after step: %s = %s\n", nz(s.GetName()), nz(s.GetValue()));
-
-    process.Continue();
-    std::printf(
-        "final state = %s, exit = %d\n", state_name(process.GetState()), process.GetExitStatus()
-    );
-
-    SBDebugger::Destroy(debugger);
-    SBDebugger::Terminate();
+    print_stop(stop);
+    flush_output();
+    if (stop.state == dans::dbg::State::exited)
+    {
+        std::cout << "exit status: " << stop.exit_status << '\n';
+        return stop.exit_status;
+    }
     return 0;
 }
